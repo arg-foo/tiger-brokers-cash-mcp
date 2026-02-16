@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tiger-mcp = "tiger_mcp.__main__:main"
+tiger-mcp = "tiger_mcp.__main__:run"
 
 [dependency-groups]
 dev = [
