@@ -1,6 +1,6 @@
 # TASK-009: Order Query Tools (2 tools)
 
-## Status: pending
+## Status: COMPLETED
 
 ## Phase: 5 - Order Tools
 

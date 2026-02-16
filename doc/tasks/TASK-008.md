@@ -1,6 +1,6 @@
 # TASK-008: Market Data Tools (3 tools)
 
-## Status: pending
+## Status: COMPLETED
 
 ## Phase: 4 - Account & Market Data Tools
 

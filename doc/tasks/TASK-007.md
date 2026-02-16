@@ -1,6 +1,6 @@
 # TASK-007: Account Tools (4 tools)
 
-## Status: pending
+## Status: COMPLETED
 
 ## Phase: 4 - Account & Market Data Tools
 
