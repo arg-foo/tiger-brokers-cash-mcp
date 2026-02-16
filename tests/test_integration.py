@@ -199,7 +199,9 @@ class TestMainWiring:
         mock_exec_init.assert_called_once_with(
             mock_client, mock_state, mock_settings,
         )
-        mock_mgmt_init.assert_called_once_with(mock_client, mock_state)
+        mock_mgmt_init.assert_called_once_with(
+            mock_client, mock_state, mock_settings,
+        )
 
     @patch("tiger_mcp.server.mcp")
     @patch("tiger_mcp.tools.orders.management.init")

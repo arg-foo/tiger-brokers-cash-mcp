@@ -13,13 +13,24 @@ startup.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
+from tiger_mcp.safety.checks import (
+    AccountInfo,
+    OrderParams,
+    PositionInfo,
+    SafetyResult,
+    run_safety_checks,
+)
 from tiger_mcp.server import mcp
 
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
+    from tiger_mcp.config import Settings
     from tiger_mcp.safety.state import DailyState
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level dependencies, set by init() during server startup.
@@ -27,10 +38,15 @@ if TYPE_CHECKING:
 
 _client: TigerClient | None = None
 _state: DailyState | None = None
+_config: Settings | None = None
 
 
-def init(client: TigerClient, state: DailyState) -> None:
-    """Set the module-level TigerClient and DailyState used by management tools.
+def init(
+    client: TigerClient,
+    state: DailyState,
+    config: Settings | None = None,
+) -> None:
+    """Set the module-level TigerClient, DailyState, and config.
 
     Parameters
     ----------
@@ -38,10 +54,14 @@ def init(client: TigerClient, state: DailyState) -> None:
         An initialised ``TigerClient`` instance.
     state:
         A ``DailyState`` instance for safety checks on modifications.
+    config:
+        Optional ``Settings`` with safety-check limits.  When ``None``
+        a permissive default (all limits disabled) is used.
     """
-    global _client, _state  # noqa: PLW0603
+    global _client, _state, _config  # noqa: PLW0603
     _client = client
     _state = state
+    _config = config
 
 
 # ---------------------------------------------------------------------------
@@ -49,54 +69,80 @@ def init(client: TigerClient, state: DailyState) -> None:
 # ---------------------------------------------------------------------------
 
 
-_BUYING_POWER_BUFFER = 1.01  # 1% safety margin
+def _get_effective_config() -> Any:
+    """Return the module-level config, or a permissive fallback.
 
-
-async def _check_buying_power_for_increase(
-    client: Any,
-    detail: dict[str, Any],
-    new_quantity: int,
-) -> str | None:
-    """Check buying power when order quantity is increased.
-
-    Returns a warning string if the additional cost exceeds available
-    cash, or ``None`` if buying power is sufficient.
-
-    Only applies to BUY orders with a limit price.  The check uses a
-    1% buffer on the estimated additional cost.
+    When ``_config`` has not been set (e.g. during testing), returns a
+    namespace with all safety limits disabled (set to ``0``).
     """
-    original_qty = detail.get("quantity", 0)
-    if new_quantity <= original_qty:
-        return None
+    if _config is not None:
+        return _config
 
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        max_order_value=0.0,
+        daily_loss_limit=0.0,
+        max_position_pct=0.0,
+    )
+
+
+def _needs_safety_checks(
+    detail: dict[str, Any],
+    quantity: int | None,
+    limit_price: float | None,
+) -> bool:
+    """Determine whether safety checks should run for this modification.
+
+    Safety checks run only when a BUY order's risk exposure is increasing:
+    - Quantity is increasing (more shares to buy)
+    - Limit price is increasing (higher cost per share)
+
+    SELL order modifications and risk-reducing changes (quantity decrease,
+    price decrease) skip safety checks.
+    """
     action = detail.get("action", "")
     if action != "BUY":
-        return None
+        return False
 
-    price = detail.get("limit_price")
-    if price is None:
-        return None
+    original_qty = detail.get("quantity", 0)
+    original_price = detail.get("limit_price")
 
-    additional_qty = new_quantity - original_qty
-    additional_cost = additional_qty * price * _BUYING_POWER_BUFFER
+    # Quantity increasing
+    if quantity is not None and quantity > original_qty:
+        return True
 
-    try:
-        assets = await client.get_assets()
-    except Exception:
-        return (
-            "Warning: Could not verify buying power. "
-            "Proceeding with modification."
-        )
+    # Limit price increasing on a BUY order
+    if (
+        limit_price is not None
+        and original_price is not None
+        and limit_price > original_price
+    ):
+        return True
 
-    cash = assets.get("cash", 0.0)
-    if additional_cost > cash:
-        return (
-            f"Warning: Insufficient buying power for quantity increase. "
-            f"Additional cost ${additional_cost:,.2f} "
-            f"(incl. 1% buffer) exceeds cash ${cash:,.2f}."
-        )
+    return False
 
-    return None
+
+def _format_safety_result(result: SafetyResult) -> str:
+    """Format a SafetyResult into human-readable text.
+
+    Errors are listed under a ``SAFETY ERRORS`` heading and warnings
+    under ``SAFETY WARNINGS``.  Returns an empty string when there are
+    no issues.
+    """
+    lines: list[str] = []
+
+    if result.errors:
+        lines.append("SAFETY ERRORS:")
+        for err in result.errors:
+            lines.append(f"  - {err}")
+
+    if result.warnings:
+        lines.append("SAFETY WARNINGS:")
+        for warn in result.warnings:
+            lines.append(f"  - {warn}")
+
+    return "\n".join(lines)
 
 
 def _format_order_summary(detail: dict[str, Any]) -> str:
@@ -123,6 +169,85 @@ def _format_order_summary(detail: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+async def _run_modify_safety_checks(
+    client: Any,
+    state: Any,
+    detail: dict[str, Any],
+    quantity: int | None,
+    limit_price: float | None,
+) -> SafetyResult:
+    """Fetch market data and run full safety checks for an order modification.
+
+    Builds an ``OrderParams`` representing the modified order state and
+    runs ``run_safety_checks()`` against it.
+
+    Parameters
+    ----------
+    client:
+        The ``TigerClient`` instance for fetching market/account data.
+    state:
+        The ``DailyState`` tracker.
+    detail:
+        Current order detail dict from ``get_order_detail``.
+    quantity:
+        New quantity (or ``None`` to keep existing).
+    limit_price:
+        New limit price (or ``None`` to keep existing).
+
+    Returns
+    -------
+    SafetyResult
+        The combined result of all safety checks.
+    """
+    symbol = detail.get("symbol", "")
+    action = detail.get("action", "BUY")
+    order_type = detail.get("order_type", "LMT")
+    effective_qty = quantity if quantity is not None else detail.get("quantity", 0)
+    effective_price = (
+        limit_price if limit_price is not None
+        else detail.get("limit_price")
+    )
+    stop_price = detail.get("aux_price")
+
+    # Fetch quote, account, and positions
+    quote = await client.get_quote(symbol)
+    assets = await client.get_assets()
+    positions = await client.get_positions()
+
+    last_price = quote.get("latest_price")
+
+    order_params = OrderParams(
+        symbol=symbol,
+        action=action,
+        quantity=effective_qty,
+        order_type=order_type,
+        limit_price=effective_price,
+        stop_price=stop_price,
+        last_price=last_price,
+    )
+    account_info = AccountInfo(
+        cash_balance=assets.get("cash", 0.0),
+        net_liquidation=assets.get("net_liquidation", 0.0),
+    )
+    position_infos = [
+        PositionInfo(
+            symbol=p.get("symbol", ""),
+            quantity=p.get("quantity", 0),
+        )
+        for p in positions
+    ]
+
+    config = _get_effective_config()
+
+    return run_safety_checks(
+        order=order_params,
+        account=account_info,
+        positions=position_infos,
+        config=config,
+        state=state,
+    )
+
+
 # ---------------------------------------------------------------------------
 # MCP Tools
 # ---------------------------------------------------------------------------
@@ -140,6 +265,11 @@ async def modify_order(
     At least one modification parameter must be provided.  Fetches the
     current order to validate it exists and is modifiable before applying
     changes.
+
+    When the modification increases risk on a BUY order (quantity increase
+    or limit price increase), full safety checks are run.  If any safety
+    error is detected, the modification is blocked.  Safety warnings are
+    included in the response but do not prevent modification.
 
     Parameters
     ----------
@@ -159,7 +289,7 @@ async def modify_order(
         A human-readable confirmation with updated order details, or an
         error message if the modification fails.
     """
-    if _client is None:
+    if _client is None or _state is None:
         return "Error: TigerClient is not initialized. Server setup incomplete."
 
     # Validate at least one modification parameter is provided.
@@ -180,14 +310,32 @@ async def modify_order(
             "Please verify the order ID is correct."
         )
 
-    # Run buying power check if quantity is increased.
-    warnings: list[str] = []
-    if quantity is not None:
-        bp_warning = await _check_buying_power_for_increase(
-            _client, detail, quantity,
-        )
-        if bp_warning is not None:
-            warnings.append(bp_warning)
+    # Run full safety checks if the modification increases risk on a BUY.
+    safety_result: SafetyResult | None = None
+    if _needs_safety_checks(detail, quantity, limit_price):
+        try:
+            safety_result = await _run_modify_safety_checks(
+                _client, _state, detail, quantity, limit_price,
+            )
+        except Exception as exc:
+            return (
+                f"Error: Could not fetch market data for safety checks "
+                f"on order {order_id}. {exc}"
+            )
+
+        # Block if safety errors are found.
+        if not safety_result.passed:
+            lines: list[str] = [
+                "Modification BLOCKED by safety checks",
+                "======================================",
+                f"  Order ID: {order_id}",
+                f"  Symbol: {detail.get('symbol', 'N/A')}",
+                "",
+            ]
+            safety_text = _format_safety_result(safety_result)
+            if safety_text:
+                lines.append(safety_text)
+            return "\n".join(lines)
 
     # Apply the modification.
     try:
@@ -226,10 +374,12 @@ async def modify_order(
         _format_order_summary(detail),
     ]
 
-    if warnings:
+    # Append safety warnings if any.
+    if safety_result is not None and safety_result.warnings:
         lines.append("")
-        for warning in warnings:
-            lines.append(warning)
+        safety_text = _format_safety_result(safety_result)
+        if safety_text:
+            lines.append(safety_text)
 
     return "\n".join(lines)
 

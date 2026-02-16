@@ -118,7 +118,7 @@ async def main() -> None:
     tiger_mcp.tools.market_data.tools.init(client)
     tiger_mcp.tools.orders.query.init(client)
     tiger_mcp.tools.orders.execution.init(client, state, settings)
-    tiger_mcp.tools.orders.management.init(client, state)
+    tiger_mcp.tools.orders.management.init(client, state, settings)
 
     logger.info(
         "tiger_mcp_tools_initialized",
