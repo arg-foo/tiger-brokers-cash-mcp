@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "zaza": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "zaza-cache:/cache",
+        "-v", "/var/run/docker.sock:/var/run/docker.sock:ro",
+        "--env-file", ".env",
+        "zaza:latest"
+      ]
+    }
+  }
+}
