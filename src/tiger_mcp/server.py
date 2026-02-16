@@ -41,6 +41,23 @@ def create_server() -> FastMCP:
 mcp: FastMCP = create_server()
 
 # ---------------------------------------------------------------------------
+# Custom HTTP routes
+# ---------------------------------------------------------------------------
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):  # noqa: ARG001
+    """Return a simple JSON health-check response.
+
+    This endpoint is public (no MCP auth required) and is useful for
+    container orchestrators, load-balancers, and monitoring probes.
+    """
+    from starlette.responses import JSONResponse
+
+    return JSONResponse({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
 # Tool registration -- importing these modules triggers @mcp.tool()
 # decorators, registering all 14 tools with the ``mcp`` instance.
 #
@@ -97,7 +114,7 @@ async def main() -> None:
     2. Configure structured logging to stderr.
     3. Create TigerClient and DailyState instances.
     4. Inject dependencies into all tool modules via their init() functions.
-    5. Run the MCP server over stdio transport.
+    5. Run the MCP server over the configured transport (stdio or streamable-http).
     """
     settings = Settings.from_env()
     configure_logging()
@@ -125,4 +142,9 @@ async def main() -> None:
         tool_count=len(mcp._tool_manager.list_tools()),
     )
 
-    await mcp.run_stdio_async()
+    if settings.mcp_transport == "streamable-http":
+        mcp.settings.host = settings.mcp_host
+        mcp.settings.port = settings.mcp_port
+        await mcp.run_streamable_http_async()
+    else:
+        await mcp.run_stdio_async()

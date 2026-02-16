@@ -1,0 +1,17 @@
+services:
+  tiger-mcp:
+    build: .
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./private.pem:/secrets/private.pem:ro
+      - tiger-state:/data/state
+    environment:
+      - TIGER_PRIVATE_KEY_PATH=/secrets/private.pem
+      - TIGER_STATE_DIR=/data/state
+      - MCP_TRANSPORT=streamable-http
+
+volumes:
+  tiger-state:

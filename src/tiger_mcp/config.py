@@ -55,6 +55,9 @@ class Settings:
     state_dir: Path = field(
         default_factory=lambda: Path.home() / ".tiger-mcp" / "state"
     )
+    mcp_transport: str = "stdio"
+    mcp_host: str = "0.0.0.0"
+    mcp_port: int = 8000
 
     # ------------------------------------------------------------------
     # Validation
@@ -92,6 +95,20 @@ class Settings:
             raise ValueError(msg)
         if self.max_position_pct < 0:
             msg = f"max_position_pct must be non-negative, got {self.max_position_pct}"
+            raise ValueError(msg)
+
+        # MCP transport must be a recognised value.
+        _valid_transports = {"stdio", "streamable-http"}
+        if self.mcp_transport not in _valid_transports:
+            msg = (
+                f"mcp_transport must be one of {sorted(_valid_transports)}, "
+                f"got {self.mcp_transport!r}"
+            )
+            raise ValueError(msg)
+
+        # MCP port must be a valid TCP port number.
+        if not (1 <= self.mcp_port <= 65535):
+            msg = f"mcp_port must be in range 1-65535, got {self.mcp_port}"
             raise ValueError(msg)
 
     # ------------------------------------------------------------------
@@ -150,6 +167,16 @@ class Settings:
         default_state = Path.home() / ".tiger-mcp" / "state"
         state_dir = Path(state_dir_raw) if state_dir_raw else default_state
 
+        # --- optional: MCP transport settings ---
+        mcp_transport = os.environ.get("MCP_TRANSPORT", "stdio")
+        mcp_host = os.environ.get("MCP_HOST", "0.0.0.0")
+        mcp_port_raw = os.environ.get("MCP_PORT", "8000")
+        try:
+            mcp_port = int(mcp_port_raw)
+        except ValueError:
+            msg = f"MCP_PORT must be a valid integer, got {mcp_port_raw!r}"
+            raise ValueError(msg) from None
+
         return cls(
             tiger_id=tiger_id,
             tiger_account=tiger_account,
@@ -159,4 +186,7 @@ class Settings:
             daily_loss_limit=daily_loss_limit,
             max_position_pct=max_position_pct,
             state_dir=state_dir,
+            mcp_transport=mcp_transport,
+            mcp_host=mcp_host,
+            mcp_port=mcp_port,
         )

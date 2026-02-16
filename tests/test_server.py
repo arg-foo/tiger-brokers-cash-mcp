@@ -8,6 +8,12 @@ from unittest.mock import patch
 import pytest
 from mcp.server.fastmcp import FastMCP
 
+import tiger_mcp.tools.account.tools
+import tiger_mcp.tools.market_data.tools
+import tiger_mcp.tools.orders.execution
+import tiger_mcp.tools.orders.management
+import tiger_mcp.tools.orders.query
+
 # ---------------------------------------------------------------------------
 # create_server()
 # ---------------------------------------------------------------------------
@@ -191,3 +197,123 @@ class TestImportSmoke:
         # This test verifies that the module-level code does NOT call
         # Settings.from_env() -- that only happens inside main().
         import tiger_mcp.server  # noqa: F401
+
+
+# ---------------------------------------------------------------------------
+# /health endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestHealthEndpoint:
+    """Test the /health custom route."""
+
+    def test_health_route_registered(self) -> None:
+        """The /health route must be registered on the mcp instance."""
+        from tiger_mcp.server import mcp
+
+        # custom_route registers Route objects on _custom_starlette_routes
+        route_paths = [r.path for r in mcp._custom_starlette_routes]
+        assert "/health" in route_paths
+
+    def test_health_handler_is_async(self) -> None:
+        """The health endpoint handler must be an async function."""
+        from tiger_mcp.server import health_check
+
+        assert inspect.iscoroutinefunction(health_check)
+
+    async def test_health_returns_ok_json(self) -> None:
+        """The health endpoint must return JSON with status ok."""
+        from starlette.applications import Starlette
+        from starlette.testclient import TestClient
+
+        from tiger_mcp.server import mcp
+
+        routes = list(mcp._custom_starlette_routes)
+        app = Starlette(routes=routes)
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Transport selection
+# ---------------------------------------------------------------------------
+
+
+class TestTransportSelection:
+    """Test transport selection logic in main()."""
+
+    async def test_http_transport_sets_host_and_port(self) -> None:
+        """When mcp_transport is streamable-http, main() sets host/port
+        and calls run_streamable_http_async."""
+        from unittest.mock import MagicMock
+
+        from tiger_mcp.server import main, mcp
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(
+                mcp, "run_streamable_http_async", return_value=None
+            ) as mock_run_http,
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.sandbox = True
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "streamable-http"
+            mock_settings.mcp_host = "127.0.0.1"
+            mock_settings.mcp_port = 9090
+
+            await main()
+
+            mock_run_http.assert_called_once()
+            assert mcp.settings.host == "127.0.0.1"
+            assert mcp.settings.port == 9090
+
+    async def test_stdio_transport_calls_run_stdio(self) -> None:
+        """When mcp_transport is stdio, main() should call run_stdio_async."""
+        from unittest.mock import MagicMock
+
+        from tiger_mcp.server import main, mcp
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(
+                mcp, "run_stdio_async", return_value=None
+            ) as mock_run_stdio,
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.sandbox = True
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "stdio"
+
+            await main()
+
+            mock_run_stdio.assert_called_once()

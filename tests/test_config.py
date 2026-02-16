@@ -96,6 +96,26 @@ class TestSettingsDirectConstruction:
         assert settings.daily_loss_limit == 0.0
         assert settings.max_position_pct == 0.0
 
+    def test_valid_port_boundaries(self, tmp_key_file: Path) -> None:
+        for port in (1, 65535):
+            settings = Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                mcp_port=port,
+            )
+            assert settings.mcp_port == port
+
+    def test_transport_defaults(self, tmp_key_file: Path) -> None:
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+        )
+        assert settings.mcp_transport == "stdio"
+        assert settings.mcp_host == "0.0.0.0"
+        assert settings.mcp_port == 8000
+
 
 # ---------------------------------------------------------------------------
 # Validation errors (direct construction)
@@ -155,6 +175,42 @@ class TestSettingsValidation:
                 tiger_account="acct",
                 private_key_path=tmp_key_file,
                 max_position_pct=-50.0,
+            )
+
+    def test_invalid_transport_raises(self, tmp_key_file: Path) -> None:
+        with pytest.raises(ValueError, match="mcp_transport"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                mcp_transport="grpc",
+            )
+
+    def test_port_zero_raises(self, tmp_key_file: Path) -> None:
+        with pytest.raises(ValueError, match="mcp_port"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                mcp_port=0,
+            )
+
+    def test_port_above_65535_raises(self, tmp_key_file: Path) -> None:
+        with pytest.raises(ValueError, match="mcp_port"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                mcp_port=65536,
+            )
+
+    def test_port_negative_raises(self, tmp_key_file: Path) -> None:
+        with pytest.raises(ValueError, match="mcp_port"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                mcp_port=-1,
             )
 
 
@@ -280,3 +336,36 @@ class TestSettingsFromEnv:
         monkeypatch.delenv("TIGER_STATE_DIR", raising=False)
         settings = Settings.from_env()
         assert settings.state_dir == Path.home() / ".tiger-mcp" / "state"
+
+    # -----------------------------------------------------------------------
+    # MCP transport settings from env
+    # -----------------------------------------------------------------------
+
+    def test_mcp_transport_from_env(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MCP_TRANSPORT", "streamable-http")
+        monkeypatch.setenv("MCP_HOST", "127.0.0.1")
+        monkeypatch.setenv("MCP_PORT", "9090")
+        settings = Settings.from_env()
+        assert settings.mcp_transport == "streamable-http"
+        assert settings.mcp_host == "127.0.0.1"
+        assert settings.mcp_port == 9090
+
+    def test_mcp_port_non_numeric_raises(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MCP_PORT", "abc")
+        with pytest.raises(ValueError, match="MCP_PORT"):
+            Settings.from_env()
+
+    def test_mcp_transport_defaults_when_not_set(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MCP_TRANSPORT", raising=False)
+        monkeypatch.delenv("MCP_HOST", raising=False)
+        monkeypatch.delenv("MCP_PORT", raising=False)
+        settings = Settings.from_env()
+        assert settings.mcp_transport == "stdio"
+        assert settings.mcp_host == "0.0.0.0"
+        assert settings.mcp_port == 8000
