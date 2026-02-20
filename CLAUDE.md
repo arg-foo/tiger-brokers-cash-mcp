@@ -1,6 +1,64 @@
 <always>
   <plan>
-    
+    **Claude Code Prompt for Plan Mode**
+    **#prompts**
+
+    Review this plan thoroughly before making any code changes. For every issue or recommendation, explain the concrete tradeoffs, give me an opinionated recommendation, and ask for my input before assuming a direction.
+    My engineering preferences (use these to guide your recommendations):
+    - DRY is important—flag repetition aggressively.
+    - Well-tested code is non-negotiable; I'd rather have too many tests than too few.
+    - I want code that's "engineered enough" — not under-engineered (fragile, hacky) and not over-engineered (premature abstraction, unnecessary complexity).
+    - I err on the side of handling more edge cases, not fewer; thoughtfulness > speed.
+    - Bias toward explicit over clever.
+
+    **1. Architecture review**
+    Evaluate:
+    - Overall system design and component boundaries.
+    - Dependency graph and coupling concerns.
+    - Data flow patterns and potential bottlenecks.
+    - Scaling characteristics and single points of failure.
+    - Security architecture (auth, data access, API boundaries).
+
+    **2. Code quality review**
+    Evaluate:
+    - Code organization and module structure.
+    - DRY violations—be aggressive here.
+    - Error handling patterns and missing edge cases (call these out explicitly).
+    - Technical debt hotspots.
+    - Areas that are over-engineered or under-engineered relative to my preferences.
+
+    **3. Test review**
+    Evaluate:
+    - Test coverage gaps (unit, integration, e2e).
+    - Test quality and assertion strength.
+    - Missing edge case coverage—be thorough.
+    - Untested failure modes and error paths.
+
+    **4. Performance review**
+    Evaluate:
+    - N+1 queries and database access patterns.
+    - Memory-usage concerns.
+    - Caching opportunities.
+    - Slow or high-complexity code paths.
+
+    **For each issue you find**
+    For every specific issue (bug, smell, design concern, or risk):
+    - Describe the problem concretely, with file and line references.
+    - Present 2–3 options, including "do nothing" where that's reasonable.
+    - For each option, specify: implementation effort, risk, impact on other code, and maintenance burden.
+    - Give me your recommended option and why, mapped to my preferences above.
+    - Then explicitly ask whether I agree or want to choose a different direction before proceeding.
+
+    **Workflow and interaction**
+    - Do not assume my priorities on timeline or scale.
+    - After each section, pause and ask for my feedback before moving on.
+
+    BEFORE YOU START:
+    Ask if I want one of two options:
+    1/ BIG CHANGE: Work through this interactively, one section at a time (Architecture → Code Quality → Tests → Performance) with at most 4 top issues in each section.
+    2/ SMALL CHANGE: Work through interactively ONE question per review section
+
+    FOR EACH STAGE OF REVIEW: output the explanation and pros and cons of each stage's questions AND your opinionated recommendation and why, and then use AskUserQuestion. Also NUMBER issues and then give LETTERS for options and when using AskUserQuestion make sure each option clearly labels the issue NUMBER and option LETTER so the user doesn't get confused. Make the recommended option always the 1st option.
   </plan>
   <implementing>
     <steps>
@@ -20,15 +78,9 @@
 <tech-stack>
   <runtime lang="Python" version=">=3.12" async="asyncio" pkg="uv" build="hatchling" />
   <mcp framework="mcp SDK" api="FastMCP" transport="stdin/stdout" pin="mcp>=1.20,&lt;2.0" />
-  <deps type="dev">
-    <dep name="pytest"         pin=">=8.0,&lt;9.0" />
-    <dep name="pytest-asyncio" pin=">=0.23,&lt;1.0" />
-    <dep name="pytest-cov"     pin=">=5.0,&lt;6.0" />
-    <dep name="pytest-timeout" pin=">=2.2,&lt;3.0" />
-    <dep name="respx"          pin=">=0.21,&lt;1.0" />
-    <dep name="ruff"           pin=">=0.8,&lt;1.0" />
-    <dep name="mypy"           pin=">=1.7,&lt;2.0" />
-  </deps>
+  <tooling>
+    <tool name="uv" role="package-manager" note="Use 'uv run' to execute scripts/tests, 'uv sync' to install deps" />
+  </tooling>
 </tech-stack>
 
 <rtk-instructions>
@@ -102,16 +154,17 @@ rtk docker images       # Compact image list
 rtk docker logs <c>     # Deduplicated logs
 ```
 
-### Python Tooling (70-90% savings)                                                                                                                                 
-```bash                                                                                                                                                             
-rtk pytest              # Pytest failures only (90%)                                                                                                                
-rtk pytest -x           # Works with all pytest flags                                                                                                               
-rtk ruff check          # Ruff lint violations grouped (80%)                                                                                                        
-rtk ruff format         # Ruff format output compact (70%)                                                                                                          
-rtk pip list            # Compact package list (70%)                                                                                                                
-rtk pip install         # Compact install output (90%)                                                                                                              
-rtk pip show <pkg>      # Compact package info (70%)                                                                                                         
-rtk pip outdated        # Compact outdated packages (80%)                                                                                                    
+### Python Tooling
+```bash
+rtk uv sync             # Compact dependency sync output
+rtk uv sync --dev       # Works with all uv sync flags
+rtk uv run pytest       # Pytest failures only (90%)
+rtk uv run pytest -x    # Works with all pytest flags
+rtk uv run ruff check   # Ruff lint violations grouped (80%)
+rtk uv run ruff format  # Ruff format output compact (70%)
+rtk uv run uvicorn      # Compact server startup output
+rtk uv pip list         # Compact package list
+rtk uv pip install      # Compact install output
 ```
 
 ### Network
