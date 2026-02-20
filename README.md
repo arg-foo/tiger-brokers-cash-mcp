@@ -13,7 +13,7 @@ An MCP (Model Context Protocol) server that gives AI assistants programmatic acc
 ### 1. Clone the repository
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:arg-foo/tiger-brokers-cash-mcp.git
 cd tiger-brokers-cash-mcp
 ```
 
