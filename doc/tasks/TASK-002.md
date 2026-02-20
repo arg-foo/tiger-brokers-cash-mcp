@@ -14,7 +14,6 @@ Implement `src/tiger_mcp/config.py` to load all configuration from environment v
   - `tiger_id: str` (required, from `TIGER_ID`)
   - `tiger_account: str` (required, from `TIGER_ACCOUNT`)
   - `private_key_path: Path` (required, from `TIGER_PRIVATE_KEY_PATH`)
-  - `sandbox: bool` (default `True`, from `TIGER_SANDBOX`)
   - `max_order_value: float` (default `0` = no limit, from `TIGER_MAX_ORDER_VALUE`)
   - `daily_loss_limit: float` (default `0` = no limit, from `TIGER_DAILY_LOSS_LIMIT`)
   - `max_position_pct: float` (default `0` = no limit, from `TIGER_MAX_POSITION_PCT`)
@@ -34,7 +33,6 @@ Implement `src/tiger_mcp/config.py` to load all configuration from environment v
 
 ## Technical Notes
 - Use `dataclasses` or `pydantic` (prefer dataclasses to keep deps minimal)
-- `sandbox=True` by default is a critical safety default - never change this
 - `0` means "no limit" for safety values, not "zero allowed"
 
 ## Complexity: Small

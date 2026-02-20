@@ -47,7 +47,6 @@ class TestSettingsDirectConstruction:
             tiger_id="my-id",
             tiger_account="my-account",
             private_key_path=tmp_key_file,
-            sandbox=False,
             max_order_value=10_000.0,
             daily_loss_limit=500.0,
             max_position_pct=25.0,
@@ -56,7 +55,6 @@ class TestSettingsDirectConstruction:
         assert settings.tiger_id == "my-id"
         assert settings.tiger_account == "my-account"
         assert settings.private_key_path == tmp_key_file
-        assert settings.sandbox is False
         assert settings.max_order_value == 10_000.0
         assert settings.daily_loss_limit == 500.0
         assert settings.max_position_pct == 25.0
@@ -68,19 +66,10 @@ class TestSettingsDirectConstruction:
             tiger_account="acct",
             private_key_path=tmp_key_file,
         )
-        assert settings.sandbox is True
         assert settings.max_order_value == 0.0
         assert settings.daily_loss_limit == 0.0
         assert settings.max_position_pct == 0.0
         assert settings.state_dir == Path.home() / ".tiger-mcp" / "state"
-
-    def test_sandbox_default_is_true(self, tmp_key_file: Path) -> None:
-        settings = Settings(
-            tiger_id="id",
-            tiger_account="acct",
-            private_key_path=tmp_key_file,
-        )
-        assert settings.sandbox is True
 
     def test_zero_means_no_limit(self, tmp_key_file: Path) -> None:
         """A value of 0 for safety fields means 'no limit'."""
@@ -230,7 +219,6 @@ class TestSettingsFromEnv:
         assert settings.tiger_account == "test-account-123"
         assert settings.private_key_path == tmp_key_file
         # defaults
-        assert settings.sandbox is True
         assert settings.max_order_value == 0.0
         assert settings.daily_loss_limit == 0.0
         assert settings.max_position_pct == 0.0
@@ -239,14 +227,12 @@ class TestSettingsFromEnv:
     def test_from_env_all_fields(
         self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("TIGER_SANDBOX", "false")
         monkeypatch.setenv("TIGER_MAX_ORDER_VALUE", "5000.50")
         monkeypatch.setenv("TIGER_DAILY_LOSS_LIMIT", "200")
         monkeypatch.setenv("TIGER_MAX_POSITION_PCT", "10.5")
         monkeypatch.setenv("TIGER_STATE_DIR", "/tmp/custom-state")
 
         settings = Settings.from_env()
-        assert settings.sandbox is False
         assert settings.max_order_value == 5000.50
         assert settings.daily_loss_limit == 200.0
         assert settings.max_position_pct == 10.5
@@ -276,47 +262,6 @@ class TestSettingsFromEnv:
         monkeypatch.setenv("TIGER_ACCOUNT", "acct")
         monkeypatch.delenv("TIGER_PRIVATE_KEY_PATH", raising=False)
         with pytest.raises(ValueError, match="TIGER_PRIVATE_KEY_PATH"):
-            Settings.from_env()
-
-    # -----------------------------------------------------------------------
-    # Boolean parsing for TIGER_SANDBOX
-    # -----------------------------------------------------------------------
-
-    @pytest.mark.parametrize(
-        ("env_value", "expected"),
-        [
-            ("true", True),
-            ("True", True),
-            ("TRUE", True),
-            ("1", True),
-            ("yes", True),
-            ("Yes", True),
-            ("YES", True),
-            ("false", False),
-            ("False", False),
-            ("FALSE", False),
-            ("0", False),
-            ("no", False),
-            ("No", False),
-            ("NO", False),
-        ],
-    )
-    def test_sandbox_boolean_parsing(
-        self,
-        valid_env: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-        env_value: str,
-        expected: bool,
-    ) -> None:
-        monkeypatch.setenv("TIGER_SANDBOX", env_value)
-        settings = Settings.from_env()
-        assert settings.sandbox is expected
-
-    def test_sandbox_invalid_value_raises(
-        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("TIGER_SANDBOX", "maybe")
-        with pytest.raises(ValueError, match="(?i)sandbox"):
             Settings.from_env()
 
     # -----------------------------------------------------------------------
@@ -369,3 +314,15 @@ class TestSettingsFromEnv:
         assert settings.mcp_transport == "stdio"
         assert settings.mcp_host == "0.0.0.0"
         assert settings.mcp_port == 8000
+
+    # -----------------------------------------------------------------------
+    # Stale environment variable resilience
+    # -----------------------------------------------------------------------
+
+    def test_stale_tiger_sandbox_env_var_is_ignored(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A leftover TIGER_SANDBOX env var from older deployments must not break config loading."""
+        monkeypatch.setenv("TIGER_SANDBOX", "true")
+        settings = Settings.from_env()
+        assert not hasattr(settings, "sandbox")

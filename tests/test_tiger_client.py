@@ -36,7 +36,6 @@ def settings(tmp_key_file: Path) -> Settings:
         tiger_id="test-id",
         tiger_account="test-account",
         private_key_path=tmp_key_file,
-        sandbox=True,
     )
 
 
@@ -94,7 +93,14 @@ class TestTigerClientConstruction:
     def test_constructor_creates_trade_and_quote_clients(
         self, settings: Settings
     ) -> None:
-        """TigerClient should create both TradeClient and QuoteClient."""
+        """TigerClient should create both TradeClient and QuoteClient.
+
+        ``sandbox_debug`` must always be ``False``. Paper (simulation) accounts
+        use the same production API endpoint as live accounts -- the account type
+        is determined by the account ID, not by any SDK flag.
+        ``sandbox_debug=True`` routes requests to a deprecated Tiger test
+        endpoint that is no longer maintained.
+        """
         with (
             patch(
                 "tiger_mcp.api.tiger_client.TigerOpenClientConfig"
@@ -114,7 +120,7 @@ class TestTigerClientConstruction:
             TigerClient(settings)
 
             # Config setup
-            mock_config_cls.assert_called_once_with(sandbox_debug=True)
+            mock_config_cls.assert_called_once_with(sandbox_debug=False)
             assert mock_cfg.tiger_id == "test-id"
             assert mock_cfg.account == "test-account"
 

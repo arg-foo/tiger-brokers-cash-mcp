@@ -172,7 +172,6 @@ class TestMainWiring:
 
         mock_settings = MagicMock()
         mock_settings.tiger_id = "test_id"
-        mock_settings.sandbox = True
         mock_settings.state_dir = "/tmp/test-state"
         mock_from_env.return_value = mock_settings
 
@@ -229,7 +228,6 @@ class TestMainWiring:
 
         mock_settings = MagicMock()
         mock_settings.tiger_id = "test_id"
-        mock_settings.sandbox = True
         mock_settings.state_dir = "/tmp/test-state"
         mock_from_env.return_value = mock_settings
         mock_tiger_client_cls.return_value = AsyncMock()

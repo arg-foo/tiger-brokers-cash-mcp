@@ -103,7 +103,6 @@ TIGER_ACCOUNT=                     # Trading account number
 TIGER_PRIVATE_KEY_PATH=            # Path to PKCS#1 RSA private key
 
 # Safety (defaults shown)
-TIGER_SANDBOX=true                 # Sandbox mode ON by default
 TIGER_MAX_ORDER_VALUE=0            # 0 = no limit
 TIGER_DAILY_LOSS_LIMIT=0           # 0 = no limit
 TIGER_MAX_POSITION_PCT=0           # 0 = no limit (e.g., 0.25 = 25%)
@@ -130,7 +129,7 @@ Register in `.mcp.json`:
     "tiger": {
       "command": "uv",
       "args": ["--directory", "/Users/zifcrypto/Desktop/tiger-mcp", "run", "python", "-m", "tiger_mcp.server"],
-      "env": { "TIGER_ID": "", "TIGER_ACCOUNT": "", "TIGER_PRIVATE_KEY_PATH": "", "TIGER_SANDBOX": "true" }
+      "env": { "TIGER_ID": "", "TIGER_ACCOUNT": "", "TIGER_PRIVATE_KEY_PATH": "" }
     }
   }
 }
@@ -153,4 +152,4 @@ Tools appear as `mcp__tiger__place_stock_order`, etc. alongside Zaza's `mcp__zaz
 2. `uv run python -m tiger_mcp.server --check` - server starts, registers 14 tools
 3. `uv run pytest tests/ --cov=tiger_mcp` - all tests pass, >80% coverage
 4. `uv run ruff check src/ tests/` - no lint errors
-5. Manual sandbox test: set `TIGER_SANDBOX=true`, place a test order via Claude Code
+5. Manual test: place a test order via Claude Code using a paper account

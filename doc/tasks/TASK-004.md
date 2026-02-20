@@ -36,7 +36,7 @@ Implement `src/tiger_mcp/api/tiger_client.py` wrapping the `tigeropen` SDK's `Tr
   ```python
   from tigeropen.common.consts import Language
   from tigeropen.tiger_open_config import TigerOpenClientConfig
-  client_config = TigerOpenClientConfig(sandbox_debug=config.sandbox)
+  client_config = TigerOpenClientConfig(sandbox_debug=False)
   client_config.private_key = read_private_key(config.private_key_path)
   client_config.tiger_id = config.tiger_id
   client_config.account = config.tiger_account

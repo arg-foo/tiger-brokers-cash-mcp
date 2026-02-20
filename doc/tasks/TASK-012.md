@@ -18,7 +18,7 @@ Final integration: register all tool domains in the server, create `.mcp.json` f
       "tiger": {
         "command": "uv",
         "args": ["--directory", "/Users/zifcrypto/Desktop/tiger-brokers-cash-mcp", "run", "python", "-m", "tiger_mcp"],
-        "env": { "TIGER_ID": "", "TIGER_ACCOUNT": "", "TIGER_PRIVATE_KEY_PATH": "", "TIGER_SANDBOX": "true" }
+        "env": { "TIGER_ID": "", "TIGER_ACCOUNT": "", "TIGER_PRIVATE_KEY_PATH": "" }
       }
     }
   }

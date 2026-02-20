@@ -74,7 +74,7 @@ class TigerClient:
     """
 
     def __init__(self, config: Settings) -> None:
-        client_config = TigerOpenClientConfig(sandbox_debug=config.sandbox)
+        client_config = TigerOpenClientConfig(sandbox_debug=False)
         client_config.private_key = config.private_key_path.read_text()
         client_config.tiger_id = config.tiger_id
         client_config.account = config.tiger_account

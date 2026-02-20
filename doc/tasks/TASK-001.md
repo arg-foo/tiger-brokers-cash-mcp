@@ -26,7 +26,7 @@ Create the full project directory structure, `pyproject.toml` with hatchling bui
   - All production dependencies: `mcp>=1.20,<2.0`, `tigeropen>=3.5,<4.0`, `pandas>=2.1,<3.0`, `structlog>=24.0,<26.0`, `orjson>=3.9,<4.0`
   - All dev dependencies: `pytest>=8.0,<9.0`, `pytest-asyncio>=0.23,<1.0`, `pytest-cov>=5.0,<6.0`, `pytest-timeout>=2.2,<3.0`, `respx>=0.21,<1.0`, `ruff>=0.8,<1.0`, `mypy>=1.7,<2.0`
   - Entry point: `tiger-mcp = "tiger_mcp.__main__:main"`
-- `.env.example` with all env vars documented (TIGER_ID, TIGER_ACCOUNT, TIGER_PRIVATE_KEY_PATH, TIGER_SANDBOX, TIGER_MAX_ORDER_VALUE, TIGER_DAILY_LOSS_LIMIT, TIGER_MAX_POSITION_PCT)
+- `.env.example` with all env vars documented (TIGER_ID, TIGER_ACCOUNT, TIGER_PRIVATE_KEY_PATH, TIGER_MAX_ORDER_VALUE, TIGER_DAILY_LOSS_LIMIT, TIGER_MAX_POSITION_PCT)
 - `.gitignore` with Python, uv, IDE, `.env` patterns
 
 ### Non-Functional

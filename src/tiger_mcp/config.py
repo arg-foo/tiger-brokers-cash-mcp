@@ -11,31 +11,6 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Truthy / falsy string literals accepted for boolean env vars.
-_BOOL_TRUE = frozenset({"true", "1", "yes"})
-_BOOL_FALSE = frozenset({"false", "0", "no"})
-
-
-def _parse_bool(value: str, var_name: str) -> bool:
-    """Parse a string into a boolean.
-
-    Accepted truthy values: ``true``, ``1``, ``yes`` (case-insensitive).
-    Accepted falsy  values: ``false``, ``0``, ``no``  (case-insensitive).
-
-    Raises:
-        ValueError: If *value* is not a recognised boolean string.
-    """
-    lower = value.lower()
-    if lower in _BOOL_TRUE:
-        return True
-    if lower in _BOOL_FALSE:
-        return False
-    msg = (
-        f"Invalid boolean value for {var_name}: {value!r}. "
-        f"Expected one of: true, false, 1, 0, yes, no"
-    )
-    raise ValueError(msg)
-
 
 @dataclass
 class Settings:
@@ -48,7 +23,6 @@ class Settings:
     tiger_id: str
     tiger_account: str
     private_key_path: Path
-    sandbox: bool = True
     max_order_value: float = 0.0
     daily_loss_limit: float = 0.0
     max_position_pct: float = 0.0
@@ -123,7 +97,6 @@ class Settings:
             ``TIGER_ID``, ``TIGER_ACCOUNT``, ``TIGER_PRIVATE_KEY_PATH``
 
         Optional environment variables:
-            ``TIGER_SANDBOX``          -- boolean (default ``True``)
             ``TIGER_MAX_ORDER_VALUE``  -- float   (default ``0``)
             ``TIGER_DAILY_LOSS_LIMIT`` -- float   (default ``0``)
             ``TIGER_MAX_POSITION_PCT`` -- float   (default ``0``)
@@ -150,13 +123,6 @@ class Settings:
             raise ValueError(msg)
         private_key_path = Path(private_key_raw)
 
-        # --- optional: sandbox ---
-        sandbox_raw = os.environ.get("TIGER_SANDBOX")
-        if sandbox_raw is not None:
-            sandbox = _parse_bool(sandbox_raw, "TIGER_SANDBOX")
-        else:
-            sandbox = True
-
         # --- optional: numeric safety limits ---
         max_order_value = float(os.environ.get("TIGER_MAX_ORDER_VALUE", "0"))
         daily_loss_limit = float(os.environ.get("TIGER_DAILY_LOSS_LIMIT", "0"))
@@ -181,7 +147,6 @@ class Settings:
             tiger_id=tiger_id,
             tiger_account=tiger_account,
             private_key_path=private_key_path,
-            sandbox=sandbox,
             max_order_value=max_order_value,
             daily_loss_limit=daily_loss_limit,
             max_position_pct=max_position_pct,

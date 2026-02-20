@@ -6,8 +6,7 @@
       "env": {
         "TIGER_ID": "",
         "TIGER_ACCOUNT": "",
-        "TIGER_PRIVATE_KEY_PATH": "",
-        "TIGER_SANDBOX": "true"
+        "TIGER_PRIVATE_KEY_PATH": ""
       }
     }
   }

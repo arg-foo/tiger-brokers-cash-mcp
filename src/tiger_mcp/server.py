@@ -123,7 +123,6 @@ async def main() -> None:
     logger.info(
         "tiger_mcp_starting",
         tiger_id=settings.tiger_id,
-        sandbox=settings.sandbox,
     )
 
     # Create shared dependencies

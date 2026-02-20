@@ -272,7 +272,6 @@ class TestTransportSelection:
             mock_structlog.get_logger.return_value = mock_logger
             mock_settings = mock_from_env.return_value
             mock_settings.tiger_id = "test-id"
-            mock_settings.sandbox = True
             mock_settings.state_dir = "/tmp/state"
             mock_settings.mcp_transport = "streamable-http"
             mock_settings.mcp_host = "127.0.0.1"
@@ -310,7 +309,6 @@ class TestTransportSelection:
             mock_structlog.get_logger.return_value = mock_logger
             mock_settings = mock_from_env.return_value
             mock_settings.tiger_id = "test-id"
-            mock_settings.sandbox = True
             mock_settings.state_dir = "/tmp/state"
             mock_settings.mcp_transport = "stdio"
 
