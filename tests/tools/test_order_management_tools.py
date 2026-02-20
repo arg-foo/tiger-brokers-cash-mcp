@@ -750,7 +750,7 @@ class TestCancelOrderTradePlan:
         )
 
         mock_trade_plans.archive.assert_called_once_with(
-            order_id=12345, reason="cancelled", archive_reason="Changed my mind",
+            order_id=12345, archive_reason="Changed my mind",
         )
 
     async def test_cancel_includes_reason_in_response(

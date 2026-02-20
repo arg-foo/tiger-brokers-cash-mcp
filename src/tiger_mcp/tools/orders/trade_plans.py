@@ -139,7 +139,6 @@ async def mark_order_filled(order_id: int, reason: str = "") -> str:
     archive_reason = reason or "filled"
     _trade_plans.archive(
         order_id=order_id,
-        reason="filled",
         archive_reason=archive_reason,
     )
 

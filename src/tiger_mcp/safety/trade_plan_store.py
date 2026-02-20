@@ -217,7 +217,6 @@ class TradePlanStore:
     def archive(
         self,
         order_id: int,
-        reason: str = "",
         archive_reason: str = "",
     ) -> None:
         """Move a trade plan from active to archive.
@@ -226,7 +225,6 @@ class TradePlanStore:
 
         Args:
             order_id: The order to archive.
-            reason: General reason string (unused in the plan itself).
             archive_reason: Stored on the plan as ``archive_reason``.
         """
         key = str(order_id)

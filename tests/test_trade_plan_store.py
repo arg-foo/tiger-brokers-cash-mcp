@@ -266,7 +266,7 @@ class TestArchive:
             quantity=10, order_type="LMT", reason="Buy",
             limit_price=150.0,
         )
-        store.archive(order_id=100, reason="Filled", archive_reason="Order filled")
+        store.archive(order_id=100, archive_reason="Order filled")
         active = store.get_active_plans()
         assert "100" not in active
         plan = store.get_plan(100)
@@ -278,7 +278,7 @@ class TestArchive:
     def test_archive_nonexistent_plan_is_noop(self, tmp_path: Path) -> None:
         store = TradePlanStore(state_dir=tmp_path)
         # Should not raise
-        store.archive(order_id=99999, reason="Does not exist")
+        store.archive(order_id=99999)
 
     def test_archive_all_moves_all_plans(self, tmp_path: Path) -> None:
         store = TradePlanStore(state_dir=tmp_path)
@@ -318,7 +318,7 @@ class TestGetPlans:
             order_id=200, symbol="GOOG", action="SELL",
             quantity=5, order_type="MKT", reason="Sell",
         )
-        store.archive(order_id=100, reason="Done")
+        store.archive(order_id=100)
         active = store.get_active_plans()
         assert len(active) == 1
         assert "200" in active
@@ -342,7 +342,7 @@ class TestGetPlans:
             quantity=10, order_type="LMT", reason="Buy",
             limit_price=150.0,
         )
-        store.archive(order_id=100, reason="Done")
+        store.archive(order_id=100)
         plan = store.get_plan(100)
         assert plan is not None
         assert plan.status == "archived"
@@ -379,7 +379,7 @@ class TestPersistence:
             quantity=10, order_type="LMT", reason="Buy",
             limit_price=150.0,
         )
-        store.archive(order_id=100, reason="Done", archive_reason="Filled")
+        store.archive(order_id=100, archive_reason="Filled")
 
         store2 = TradePlanStore(state_dir=tmp_path)
         assert len(store2.get_active_plans()) == 0
@@ -418,7 +418,7 @@ class TestPersistence:
             order_id=100, symbol="AAPL", action="BUY",
             quantity=10, order_type="LMT", reason="Buy",
         )
-        store.archive(order_id=100, reason="Done")
+        store.archive(order_id=100)
         assert (tmp_path / "trade_plans_archive.json").exists()
 
     def test_creates_state_dir_if_missing(self, tmp_path: Path) -> None:

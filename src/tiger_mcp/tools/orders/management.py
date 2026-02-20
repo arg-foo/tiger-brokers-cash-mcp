@@ -413,8 +413,7 @@ async def cancel_order(order_id: int, reason: str = "") -> str:
     if _trade_plans is not None:
         _trade_plans.archive(
             order_id=order_id,
-            reason="cancelled",
-            archive_reason=reason,
+            archive_reason=reason or "cancelled",
         )
 
     symbol = detail.get("symbol", "N/A")

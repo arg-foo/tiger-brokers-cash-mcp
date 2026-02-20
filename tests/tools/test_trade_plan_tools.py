@@ -185,7 +185,7 @@ class TestMarkOrderFilled:
         result = await trade_plans_mod.mark_order_filled(order_id=12345)
 
         mock_trade_plans.archive.assert_called_once_with(
-            order_id=12345, reason="filled", archive_reason="filled",
+            order_id=12345, archive_reason="filled",
         )
         assert "Archived" in result or "archived" in result.lower()
         assert "12345" in result
@@ -204,7 +204,7 @@ class TestMarkOrderFilled:
         )
 
         mock_trade_plans.archive.assert_called_once_with(
-            order_id=12345, reason="filled", archive_reason="Filled at $152.30",
+            order_id=12345, archive_reason="Filled at $152.30",
         )
         assert "Filled at $152.30" in result
 

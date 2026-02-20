@@ -13,10 +13,16 @@ FROM python:3.12-slim-bookworm
 RUN groupadd -g 1000 tiger && useradd -u 1000 -g tiger -m tiger
 
 COPY --from=builder /app/.venv /app/.venv
+
+# Create state directory for DailyState and TradePlanStore JSON files.
+# Owned by tiger user so writes succeed when running as non-root.
+RUN mkdir -p /data/state && chown tiger:tiger /data/state
+
 ENV PATH="/app/.venv/bin:$PATH" \
     MCP_TRANSPORT=streamable-http \
     MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000
+    MCP_PORT=8000 \
+    TIGER_STATE_DIR=/data/state
 
 EXPOSE 8000
 
