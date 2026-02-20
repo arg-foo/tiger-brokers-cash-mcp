@@ -2,7 +2,7 @@
 
 ## Overview
 
-12 tasks across 6 phases to implement a Tiger Brokers MCP server for spot stock trading with cash account safety enforcement.
+13 tasks across 7 phases to implement a Tiger Brokers MCP server for spot stock trading with cash account safety enforcement.
 
 ## Task Summary
 
@@ -20,6 +20,7 @@
 | TASK-010 | 5 | Order Execution Tools (2 tools) | Large | COMPLETED | TASK-004, TASK-005, TASK-006 |
 | TASK-011 | 5 | Order Management Tools (3 tools) | Medium | COMPLETED | TASK-003, TASK-004, TASK-006 |
 | TASK-012 | 6 | Integration & Verification | Small | COMPLETED | TASK-007..011 |
+| TASK-013 | 7 | Paper Account E2E Testing | Medium | PENDING | TASK-012 |
 
 ## Dependency Graph
 
@@ -60,6 +61,9 @@ Cash account enforcement: state tracking + 6 pre-trade checks.
 
 ### Phase 6: Integration (TASK-012)
 Final assembly, MCP registration, end-to-end verification.
+
+### Phase 7: Manual Validation (TASK-013)
+End-to-end testing against a real Tiger Brokers paper trading account.
 
 ## Tool Count by Task
 
