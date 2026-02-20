@@ -10,9 +10,9 @@ Provides two tools:
 
 Client and state access pattern
 -------------------------------
-Module-level ``_client``, ``_state``, and ``_config`` references are
-set via the ``init(client, state, config)`` function during server
-startup.
+Module-level ``_client``, ``_state``, ``_config``, and ``_trade_plans``
+references are set via the ``init(client, state, config, trade_plans)``
+function during server startup.
 """
 
 from __future__ import annotations
@@ -28,10 +28,12 @@ from tiger_mcp.safety.checks import (
 )
 from tiger_mcp.safety.state import DailyState
 from tiger_mcp.server import mcp
+from tiger_mcp.tools.orders._helpers import format_safety_result, get_effective_config
 
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
     from tiger_mcp.config import Settings
+    from tiger_mcp.safety.trade_plan_store import TradePlanStore
 
 # ---------------------------------------------------------------------------
 # Module-level dependencies, set by init() during server startup.
@@ -40,6 +42,7 @@ if TYPE_CHECKING:
 _client: TigerClient | None = None
 _state: DailyState | None = None
 _config: Settings | None = None
+_trade_plans: TradePlanStore | None = None
 
 # ---------------------------------------------------------------------------
 # Valid values for user-facing parameters.
@@ -65,11 +68,12 @@ def init(
     client: TigerClient,
     state: DailyState,
     config: Settings | None = None,
+    trade_plans: TradePlanStore | None = None,
 ) -> None:
     """Set the module-level dependencies.
 
     Called once during server initialisation so that tool functions can
-    access the shared client, state, and configuration.
+    access the shared client, state, configuration, and trade plan store.
 
     Parameters
     ----------
@@ -80,11 +84,14 @@ def init(
     config:
         Optional ``Settings`` with safety-check limits.  When ``None``
         a permissive default (all limits disabled) is used.
+    trade_plans:
+        Optional ``TradePlanStore`` for persisting trade plan metadata.
     """
-    global _client, _state, _config  # noqa: PLW0603
+    global _client, _state, _config, _trade_plans  # noqa: PLW0603
     _client = client
     _state = state
     _config = config
+    _trade_plans = trade_plans
 
 
 # ---------------------------------------------------------------------------
@@ -149,28 +156,6 @@ def _validate_order_params(
     return None
 
 
-def _format_safety_result(result: SafetyResult) -> str:
-    """Format a SafetyResult into human-readable text.
-
-    Errors are listed under a ``SAFETY ERRORS`` heading and warnings
-    under ``SAFETY WARNINGS``.  Returns an empty string when there are
-    no issues.
-    """
-    lines: list[str] = []
-
-    if result.errors:
-        lines.append("SAFETY ERRORS:")
-        for err in result.errors:
-            lines.append(f"  - {err}")
-
-    if result.warnings:
-        lines.append("SAFETY WARNINGS:")
-        for warn in result.warnings:
-            lines.append(f"  - {warn}")
-
-    return "\n".join(lines)
-
-
 async def _fetch_safety_data(
     client: TigerClient,
     symbol: str,
@@ -186,24 +171,6 @@ async def _fetch_safety_data(
     assets = await client.get_assets()
     positions = await client.get_positions()
     return quote, assets, positions
-
-
-def _get_effective_config() -> Any:
-    """Return the module-level config, or a permissive fallback.
-
-    When ``_config`` has not been set (e.g. during testing), returns a
-    namespace with all safety limits disabled (set to ``0``).
-    """
-    if _config is not None:
-        return _config
-
-    from types import SimpleNamespace
-
-    return SimpleNamespace(
-        max_order_value=0.0,
-        daily_loss_limit=0.0,
-        max_position_pct=0.0,
-    )
 
 
 async def _build_and_run_safety(
@@ -250,7 +217,7 @@ async def _build_and_run_safety(
         for p in positions
     ]
 
-    config = _get_effective_config()
+    config = get_effective_config(_config)
 
     safety_result = run_safety_checks(
         order=order_params,
@@ -373,7 +340,7 @@ async def preview_stock_order(
     else:
         lines.append(f"  Commission:      {commission}")
 
-    safety_text = _format_safety_result(safety_result)
+    safety_text = format_safety_result(safety_result)
     if safety_text:
         lines.append("")
         lines.append(safety_text)
@@ -387,6 +354,7 @@ async def place_stock_order(
     action: str,
     quantity: int,
     order_type: str,
+    reason: str,
     limit_price: float | None = None,
     stop_price: float | None = None,
 ) -> str:
@@ -407,6 +375,9 @@ async def place_stock_order(
         Number of shares. Must be a positive integer.
     order_type:
         One of ``MKT``, ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+    reason:
+        Human-readable reason for this trade (e.g. thesis, strategy).
+        Persisted alongside the order for future reference.
     limit_price:
         Required for ``LMT`` and ``STP_LMT`` orders.
     stop_price:
@@ -415,7 +386,7 @@ async def place_stock_order(
     Returns
     -------
     str
-        On success: order_id, status, fill details, and any warnings.
+        On success: order_id, status, fill details, reason, and any warnings.
         On safety error: error messages explaining why the order was
         blocked.
     """
@@ -447,7 +418,7 @@ async def place_stock_order(
             "Order BLOCKED by safety checks",
             "==============================",
         ]
-        safety_text = _format_safety_result(safety_result)
+        safety_text = format_safety_result(safety_result)
         if safety_text:
             lines.append("")
             lines.append(safety_text)
@@ -479,8 +450,24 @@ async def place_stock_order(
     )
     _state.record_order(fingerprint)
 
-    # 6. Format success response
+    # 6. Create trade plan if store is available
     order_id = order_result.get("order_id", "N/A")
+    if _trade_plans is not None and isinstance(order_id, int):
+        try:
+            _trade_plans.create(
+                order_id=order_id,
+                symbol=symbol,
+                action=action,
+                quantity=quantity,
+                order_type=order_type,
+                reason=reason,
+                limit_price=limit_price,
+                stop_price=stop_price,
+            )
+        except Exception:
+            pass  # Order was placed successfully; plan persistence is best-effort
+
+    # 7. Format success response
     o_symbol = order_result.get("symbol", symbol)
     o_action = order_result.get("action", action)
     o_qty = order_result.get("quantity", quantity)
@@ -494,9 +481,10 @@ async def place_stock_order(
         f"  Action:      {o_action}",
         f"  Quantity:    {o_qty}",
         f"  Order Type:  {o_type}",
+        f"  Reason:      {reason}",
     ]
 
-    safety_text = _format_safety_result(safety_result)
+    safety_text = format_safety_result(safety_result)
     if safety_text:
         lines.append("")
         lines.append(safety_text)

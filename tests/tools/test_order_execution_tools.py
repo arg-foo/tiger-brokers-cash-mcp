@@ -55,10 +55,20 @@ def mock_state() -> MagicMock:
     return state
 
 
+@pytest.fixture()
+def mock_trade_plans() -> MagicMock:
+    """Create a mock TradePlanStore."""
+    return MagicMock()
+
+
 @pytest.fixture(autouse=True)
-def _init_module(mock_client: AsyncMock, mock_state: MagicMock) -> None:
-    """Inject mock client and state into the execution module before each test."""
-    execution_mod.init(mock_client, mock_state)
+def _init_module(
+    mock_client: AsyncMock,
+    mock_state: MagicMock,
+    mock_trade_plans: MagicMock,
+) -> None:
+    """Inject mock client, state, and trade plans into the execution module."""
+    execution_mod.init(mock_client, mock_state, trade_plans=mock_trade_plans)
 
 
 def _safety_passed(
@@ -342,6 +352,7 @@ class TestPlaceStockOrder:
 
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Bullish thesis",
         )
 
         assert "12345" in result
@@ -360,6 +371,7 @@ class TestPlaceStockOrder:
 
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="SELL", quantity=100, order_type="MKT",
+            reason="Bearish thesis",
         )
 
         assert "Short selling blocked" in result
@@ -380,6 +392,7 @@ class TestPlaceStockOrder:
 
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Buying dip",
         )
 
         assert "12345" in result
@@ -393,6 +406,7 @@ class TestPlaceStockOrder:
         """Place order with invalid params returns error without calling API."""
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=-10, order_type="MKT",
+            reason="Test",
         )
 
         assert "error" in result.lower() or "Error" in result
@@ -410,6 +424,7 @@ class TestPlaceStockOrder:
 
         await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Test fingerprint",
         )
 
         mock_state.record_order.assert_called_once()
@@ -431,6 +446,7 @@ class TestPlaceStockOrder:
 
         await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Test",
         )
 
         mock_state.record_order.assert_not_called()
@@ -447,6 +463,7 @@ class TestPlaceStockOrder:
 
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Test",
         )
 
         assert "error" in result.lower() or "Error" in result
@@ -460,6 +477,7 @@ class TestPlaceStockOrder:
         """Place LMT order without limit_price should return validation error."""
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            reason="Test",
         )
 
         assert "limit_price" in result.lower()
@@ -474,6 +492,7 @@ class TestPlaceStockOrder:
         """Place STP order without stop_price should return validation error."""
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="STP",
+            reason="Test",
         )
 
         assert "stop_price" in result.lower()
@@ -498,6 +517,7 @@ class TestPlaceStockOrder:
         result = await execution_mod.place_stock_order(
             symbol="TSLA", action="BUY", quantity=50,
             order_type="LMT", limit_price=200.0,
+            reason="TSLA breakout",
         )
 
         assert "99999" in result
@@ -519,11 +539,73 @@ class TestPlaceStockOrder:
 
         result = await execution_mod.place_stock_order(
             symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Test",
         )
 
         assert "Insufficient buying power" in result
         assert "Max order value exceeded" in result
         mock_client.place_order.assert_not_awaited()
+
+    @patch("tiger_mcp.tools.orders.execution.run_safety_checks")
+    async def test_place_order_creates_trade_plan(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """place_stock_order should create a trade plan on success."""
+        mock_safety.return_value = _safety_passed()
+
+        await execution_mod.place_stock_order(
+            symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Earnings play",
+        )
+
+        mock_trade_plans.create.assert_called_once_with(
+            order_id=12345,
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="MKT",
+            reason="Earnings play",
+            limit_price=None,
+            stop_price=None,
+        )
+
+    @patch("tiger_mcp.tools.orders.execution.run_safety_checks")
+    async def test_place_order_does_not_create_trade_plan_on_safety_error(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """place_stock_order should NOT create a trade plan when safety blocks."""
+        mock_safety.return_value = _safety_failed(
+            errors=["Insufficient buying power"],
+        )
+
+        await execution_mod.place_stock_order(
+            symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="Test",
+        )
+
+        mock_trade_plans.create.assert_not_called()
+
+    @patch("tiger_mcp.tools.orders.execution.run_safety_checks")
+    async def test_place_order_includes_reason_in_response(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Successful place_stock_order should include reason in result."""
+        mock_safety.return_value = _safety_passed()
+
+        result = await execution_mod.place_stock_order(
+            symbol="AAPL", action="BUY", quantity=100, order_type="MKT",
+            reason="AAPL undervalued after dip",
+        )
+
+        assert "AAPL undervalued after dip" in result
 
 
 # ---------------------------------------------------------------------------
@@ -532,33 +614,41 @@ class TestPlaceStockOrder:
 
 
 class TestFormatSafetyResult:
-    """Tests for _format_safety_result helper."""
+    """Tests for format_safety_result shared helper."""
 
     def test_format_empty_result(self) -> None:
         """Empty safety result should produce minimal output."""
-        result = execution_mod._format_safety_result(_safety_passed())
+        from tiger_mcp.tools.orders._helpers import format_safety_result
+
+        result = format_safety_result(_safety_passed())
         assert isinstance(result, str)
 
     def test_format_with_errors(self) -> None:
         """Errors should appear in the formatted text."""
+        from tiger_mcp.tools.orders._helpers import format_safety_result
+
         sr = _safety_failed(errors=["Error one", "Error two"])
-        result = execution_mod._format_safety_result(sr)
+        result = format_safety_result(sr)
         assert "Error one" in result
         assert "Error two" in result
 
     def test_format_with_warnings(self) -> None:
         """Warnings should appear in the formatted text."""
+        from tiger_mcp.tools.orders._helpers import format_safety_result
+
         sr = _safety_passed(warnings=["Warning one"])
-        result = execution_mod._format_safety_result(sr)
+        result = format_safety_result(sr)
         assert "Warning one" in result
 
     def test_format_with_both_errors_and_warnings(self) -> None:
         """Both errors and warnings should appear."""
+        from tiger_mcp.tools.orders._helpers import format_safety_result
+
         sr = _safety_failed(
             errors=["An error occurred"],
             warnings=["A warning issued"],
         )
-        result = execution_mod._format_safety_result(sr)
+        result = format_safety_result(sr)
         assert "An error occurred" in result
         assert "A warning issued" in result
 
@@ -569,7 +659,7 @@ class TestFormatSafetyResult:
 
 
 class TestClientAccessPattern:
-    """Test the module-level _client/_state and init() pattern."""
+    """Test the module-level _client/_state/_trade_plans and init() pattern."""
 
     def test_init_function_exists(self) -> None:
         """The module should expose an init(client, state) function."""
@@ -584,6 +674,11 @@ class TestClientAccessPattern:
         """init() should set the module-level _state."""
         execution_mod.init(AsyncMock(), mock_state)
         assert execution_mod._state is mock_state
+
+    def test_init_sets_trade_plans(self, mock_trade_plans: MagicMock) -> None:
+        """init() should set the module-level _trade_plans."""
+        execution_mod.init(AsyncMock(), MagicMock(), trade_plans=mock_trade_plans)
+        assert execution_mod._trade_plans is mock_trade_plans
 
 
 # ---------------------------------------------------------------------------

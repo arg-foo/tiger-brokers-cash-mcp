@@ -13,6 +13,7 @@ import tiger_mcp.tools.market_data.tools
 import tiger_mcp.tools.orders.execution
 import tiger_mcp.tools.orders.management
 import tiger_mcp.tools.orders.query
+import tiger_mcp.tools.orders.trade_plans
 
 # ---------------------------------------------------------------------------
 # create_server()
@@ -260,11 +261,13 @@ class TestTransportSelection:
             patch("tiger_mcp.server.structlog") as mock_structlog,
             patch("tiger_mcp.server.TigerClient"),
             patch("tiger_mcp.server.DailyState"),
+            patch("tiger_mcp.server.TradePlanStore"),
             patch.object(tiger_mcp.tools.account.tools, "init"),
             patch.object(tiger_mcp.tools.market_data.tools, "init"),
             patch.object(tiger_mcp.tools.orders.query, "init"),
             patch.object(tiger_mcp.tools.orders.execution, "init"),
             patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(tiger_mcp.tools.orders.trade_plans, "init"),
             patch.object(
                 mcp, "run_streamable_http_async", return_value=None
             ) as mock_run_http,
@@ -297,11 +300,13 @@ class TestTransportSelection:
             patch("tiger_mcp.server.structlog") as mock_structlog,
             patch("tiger_mcp.server.TigerClient"),
             patch("tiger_mcp.server.DailyState"),
+            patch("tiger_mcp.server.TradePlanStore"),
             patch.object(tiger_mcp.tools.account.tools, "init"),
             patch.object(tiger_mcp.tools.market_data.tools, "init"),
             patch.object(tiger_mcp.tools.orders.query, "init"),
             patch.object(tiger_mcp.tools.orders.execution, "init"),
             patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(tiger_mcp.tools.orders.trade_plans, "init"),
             patch.object(
                 mcp, "run_stdio_async", return_value=None
             ) as mock_run_stdio,

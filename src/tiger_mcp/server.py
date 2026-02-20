@@ -59,7 +59,7 @@ async def health_check(request):  # noqa: ARG001
 
 # ---------------------------------------------------------------------------
 # Tool registration -- importing these modules triggers @mcp.tool()
-# decorators, registering all 14 tools with the ``mcp`` instance.
+# decorators, registering all 16 tools with the ``mcp`` instance.
 #
 # IMPORTANT: These imports MUST come after ``mcp`` is defined above
 # to avoid circular import errors.
@@ -70,8 +70,10 @@ import tiger_mcp.tools.market_data.tools  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.execution  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.management  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.query  # noqa: E402, F401, I001
+import tiger_mcp.tools.orders.trade_plans  # noqa: E402, F401, I001
 from tiger_mcp.api.tiger_client import TigerClient  # noqa: E402, I001
 from tiger_mcp.safety.state import DailyState  # noqa: E402, I001
+from tiger_mcp.safety.trade_plan_store import TradePlanStore  # noqa: E402, I001
 
 # ---------------------------------------------------------------------------
 # Structlog configuration
@@ -128,13 +130,15 @@ async def main() -> None:
     # Create shared dependencies
     client = TigerClient(settings)
     state = DailyState(settings.state_dir)
+    trade_plans = TradePlanStore(settings.state_dir)
 
     # Wire dependencies into tool modules
     tiger_mcp.tools.account.tools.init(client)
     tiger_mcp.tools.market_data.tools.init(client)
     tiger_mcp.tools.orders.query.init(client)
-    tiger_mcp.tools.orders.execution.init(client, state, settings)
-    tiger_mcp.tools.orders.management.init(client, state, settings)
+    tiger_mcp.tools.orders.execution.init(client, state, settings, trade_plans)
+    tiger_mcp.tools.orders.management.init(client, state, settings, trade_plans)
+    tiger_mcp.tools.orders.trade_plans.init(trade_plans, client)
 
     logger.info(
         "tiger_mcp_tools_initialized",

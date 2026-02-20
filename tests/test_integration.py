@@ -1,9 +1,9 @@
-"""Integration tests for TASK-012: server wiring and tool registration.
+"""Integration tests for server wiring and tool registration.
 
 Verifies that:
-- All 14 tools are registered with the FastMCP server instance.
+- All 16 tools are registered with the FastMCP server instance.
 - Tool modules are importable and register their tools at import time.
-- main() creates TigerClient / DailyState and calls init() on each module.
+- main() creates TigerClient / DailyState / TradePlanStore and calls init() on each module.
 - The server can be imported without real credentials (no side effects).
 """
 
@@ -30,13 +30,13 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    """Verify all 14 tools are registered with the MCP server instance."""
+    """Verify all 16 tools are registered with the MCP server instance."""
 
-    def test_all_14_tools_registered(self) -> None:
-        """Importing the server module should result in 14 registered tools."""
+    def test_all_16_tools_registered(self) -> None:
+        """Importing the server module should result in 16 registered tools."""
         tool_names = _get_registered_tool_names()
-        assert len(tool_names) == 14, (
-            f"Expected 14 tools to be registered, got {len(tool_names)}. "
+        assert len(tool_names) == 16, (
+            f"Expected 16 tools to be registered, got {len(tool_names)}. "
             f"Tool names: {sorted(tool_names)}"
         )
 
@@ -99,6 +99,17 @@ class TestToolRegistration:
             f"Missing order management tools: {expected - tool_names}"
         )
 
+    def test_trade_plan_tools_registered(self) -> None:
+        """The two trade plan tools must be registered."""
+        tool_names = _get_registered_tool_names()
+        expected = {
+            "get_trade_plans",
+            "mark_order_filled",
+        }
+        assert expected.issubset(tool_names), (
+            f"Missing trade plan tools: {expected - tool_names}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Import ordering
@@ -119,6 +130,7 @@ class TestImportOrdering:
         import tiger_mcp.tools.orders.execution  # noqa: F401
         import tiger_mcp.tools.orders.management  # noqa: F401
         import tiger_mcp.tools.orders.query  # noqa: F401
+        import tiger_mcp.tools.orders.trade_plans  # noqa: F401
 
     def test_mcp_instance_is_same_across_all_modules(self) -> None:
         """All tool modules must reference the same mcp instance from server."""
@@ -147,11 +159,13 @@ class TestMainWiring:
     """Verify main() creates dependencies and calls init() on tool modules."""
 
     @patch("tiger_mcp.server.mcp")
+    @patch("tiger_mcp.tools.orders.trade_plans.init")
     @patch("tiger_mcp.tools.orders.management.init")
     @patch("tiger_mcp.tools.orders.execution.init")
     @patch("tiger_mcp.tools.orders.query.init")
     @patch("tiger_mcp.tools.market_data.tools.init")
     @patch("tiger_mcp.tools.account.tools.init")
+    @patch("tiger_mcp.server.TradePlanStore")
     @patch("tiger_mcp.server.TigerClient")
     @patch("tiger_mcp.server.DailyState")
     @patch("tiger_mcp.server.Settings.from_env")
@@ -160,14 +174,16 @@ class TestMainWiring:
         mock_from_env: MagicMock,
         mock_daily_state_cls: MagicMock,
         mock_tiger_client_cls: MagicMock,
+        mock_trade_plan_store_cls: MagicMock,
         mock_account_init: MagicMock,
         mock_market_init: MagicMock,
         mock_query_init: MagicMock,
         mock_exec_init: MagicMock,
         mock_mgmt_init: MagicMock,
+        mock_tp_init: MagicMock,
         mock_mcp: MagicMock,
     ) -> None:
-        """main() should create TigerClient and DailyState, and call init()."""
+        """main() should create TigerClient, DailyState, TradePlanStore and call init()."""
         from tiger_mcp.server import main
 
         mock_settings = MagicMock()
@@ -181,6 +197,9 @@ class TestMainWiring:
         mock_state = MagicMock()
         mock_daily_state_cls.return_value = mock_state
 
+        mock_trade_plans = MagicMock()
+        mock_trade_plan_store_cls.return_value = mock_trade_plans
+
         mock_mcp.run_stdio_async = AsyncMock()
 
         await main()
@@ -191,23 +210,29 @@ class TestMainWiring:
         # Verify DailyState was created with state_dir
         mock_daily_state_cls.assert_called_once_with(mock_settings.state_dir)
 
+        # Verify TradePlanStore was created with state_dir
+        mock_trade_plan_store_cls.assert_called_once_with(mock_settings.state_dir)
+
         # Verify all init() functions were called with correct dependencies
         mock_account_init.assert_called_once_with(mock_client)
         mock_market_init.assert_called_once_with(mock_client)
         mock_query_init.assert_called_once_with(mock_client)
         mock_exec_init.assert_called_once_with(
-            mock_client, mock_state, mock_settings,
+            mock_client, mock_state, mock_settings, mock_trade_plans,
         )
         mock_mgmt_init.assert_called_once_with(
-            mock_client, mock_state, mock_settings,
+            mock_client, mock_state, mock_settings, mock_trade_plans,
         )
+        mock_tp_init.assert_called_once_with(mock_trade_plans, mock_client)
 
     @patch("tiger_mcp.server.mcp")
+    @patch("tiger_mcp.tools.orders.trade_plans.init")
     @patch("tiger_mcp.tools.orders.management.init")
     @patch("tiger_mcp.tools.orders.execution.init")
     @patch("tiger_mcp.tools.orders.query.init")
     @patch("tiger_mcp.tools.market_data.tools.init")
     @patch("tiger_mcp.tools.account.tools.init")
+    @patch("tiger_mcp.server.TradePlanStore")
     @patch("tiger_mcp.server.TigerClient")
     @patch("tiger_mcp.server.DailyState")
     @patch("tiger_mcp.server.Settings.from_env")
@@ -216,11 +241,13 @@ class TestMainWiring:
         mock_from_env: MagicMock,
         mock_daily_state_cls: MagicMock,
         mock_tiger_client_cls: MagicMock,
+        mock_trade_plan_store_cls: MagicMock,
         mock_account_init: MagicMock,
         mock_market_init: MagicMock,
         mock_query_init: MagicMock,
         mock_exec_init: MagicMock,
         mock_mgmt_init: MagicMock,
+        mock_tp_init: MagicMock,
         mock_mcp: MagicMock,
     ) -> None:
         """main() should call mcp.run_stdio_async() to start the server."""
@@ -232,6 +259,7 @@ class TestMainWiring:
         mock_from_env.return_value = mock_settings
         mock_tiger_client_cls.return_value = AsyncMock()
         mock_daily_state_cls.return_value = MagicMock()
+        mock_trade_plan_store_cls.return_value = MagicMock()
         mock_mcp.run_stdio_async = AsyncMock()
 
         await main()

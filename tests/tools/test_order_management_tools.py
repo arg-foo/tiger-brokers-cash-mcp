@@ -43,14 +43,21 @@ def mock_config() -> SimpleNamespace:
     )
 
 
+@pytest.fixture()
+def mock_trade_plans() -> MagicMock:
+    """Create a mock TradePlanStore."""
+    return MagicMock()
+
+
 @pytest.fixture(autouse=True)
 def _init_module(
     mock_client: AsyncMock,
     mock_state: MagicMock,
     mock_config: SimpleNamespace,
+    mock_trade_plans: MagicMock,
 ) -> None:
-    """Inject the mock client, state, and config into the management module."""
-    order_mgmt_mod.init(mock_client, mock_state, mock_config)
+    """Inject the mock client, state, config, and trade plans into the management module."""
+    order_mgmt_mod.init(mock_client, mock_state, mock_config, mock_trade_plans)
 
 
 def _make_buy_order_detail(
@@ -596,6 +603,7 @@ class TestCancelOrder:
     async def test_cancel_order_api_failure_returns_error(
         self,
         mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
     ) -> None:
         """cancel_order should return error when the cancel API call fails."""
         mock_client.get_order_detail.return_value = {
@@ -616,6 +624,7 @@ class TestCancelOrder:
 
         assert "error" in result.lower()
         assert "12345" in result
+        mock_trade_plans.archive.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -671,12 +680,138 @@ class TestCancelAllOrders:
 
 
 # ---------------------------------------------------------------------------
+# Trade plan integration
+# ---------------------------------------------------------------------------
+
+
+class TestModifyOrderTradePlan:
+    """Tests for trade plan recording in modify_order."""
+
+    async def test_modify_records_trade_plan(
+        self,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """modify_order should record modification in trade plan store."""
+        mock_client.get_order_detail.return_value = _make_buy_order_detail()
+        _setup_quote_and_positions(mock_client)
+        mock_client.modify_order.return_value = {
+            "order_id": 12345, "modified": True, "result": None,
+        }
+
+        await order_mgmt_mod.modify_order(
+            order_id=12345, quantity=200, reason="Increasing position",
+        )
+
+        mock_trade_plans.record_modification.assert_called_once_with(
+            order_id=12345,
+            changes={"quantity": 200},
+            reason="Increasing position",
+        )
+
+    async def test_modify_includes_reason_in_response(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """modify_order should include reason in the response."""
+        mock_client.get_order_detail.return_value = _make_buy_order_detail()
+        _setup_quote_and_positions(mock_client)
+        mock_client.modify_order.return_value = {
+            "order_id": 12345, "modified": True, "result": None,
+        }
+
+        result = await order_mgmt_mod.modify_order(
+            order_id=12345, quantity=200, reason="Better entry point",
+        )
+
+        assert "Better entry point" in result
+
+
+class TestCancelOrderTradePlan:
+    """Tests for trade plan archiving in cancel_order."""
+
+    async def test_cancel_archives_trade_plan(
+        self,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """cancel_order should archive the trade plan."""
+        mock_client.get_order_detail.return_value = {
+            "order_id": 12345, "symbol": "AAPL", "action": "BUY",
+            "order_type": "limit", "quantity": 100, "filled": 0,
+            "limit_price": 150.0, "status": "NEW",
+        }
+        mock_client.cancel_order.return_value = {
+            "order_id": 12345, "cancelled": True, "result": None,
+        }
+
+        await order_mgmt_mod.cancel_order(
+            order_id=12345, reason="Changed my mind",
+        )
+
+        mock_trade_plans.archive.assert_called_once_with(
+            order_id=12345, reason="cancelled", archive_reason="Changed my mind",
+        )
+
+    async def test_cancel_includes_reason_in_response(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """cancel_order should include reason in the response."""
+        mock_client.get_order_detail.return_value = {
+            "order_id": 12345, "symbol": "AAPL", "action": "BUY",
+            "order_type": "limit", "quantity": 100, "filled": 0,
+            "limit_price": 150.0, "status": "NEW",
+        }
+        mock_client.cancel_order.return_value = {
+            "order_id": 12345, "cancelled": True, "result": None,
+        }
+
+        result = await order_mgmt_mod.cancel_order(
+            order_id=12345, reason="Thesis invalidated",
+        )
+
+        assert "Thesis invalidated" in result
+
+
+class TestCancelAllOrdersTradePlan:
+    """Tests for trade plan archiving in cancel_all_orders."""
+
+    async def test_cancel_all_archives_all_trade_plans(
+        self,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """cancel_all_orders should archive all trade plans."""
+        mock_client.cancel_all_orders.return_value = [
+            {"order_id": 111, "cancelled": True, "result": None},
+            {"order_id": 222, "cancelled": True, "result": None},
+        ]
+
+        await order_mgmt_mod.cancel_all_orders()
+
+        mock_trade_plans.archive_all.assert_called_once_with(reason="cancelled")
+
+    async def test_cancel_all_does_not_archive_when_no_orders(
+        self,
+        mock_client: AsyncMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """cancel_all_orders should not archive when there are no orders."""
+        mock_client.cancel_all_orders.return_value = []
+
+        await order_mgmt_mod.cancel_all_orders()
+
+        mock_trade_plans.archive_all.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Module-level client access pattern
 # ---------------------------------------------------------------------------
 
 
 class TestClientAccessPattern:
-    """Test the module-level _client, _state, and init() pattern."""
+    """Test the module-level _client, _state, _trade_plans and init() pattern."""
 
     def test_init_function_exists(self) -> None:
         """The module should expose an init(client, state) function."""
@@ -695,6 +830,14 @@ class TestClientAccessPattern:
         """init() should set the module-level _state."""
         order_mgmt_mod.init(mock_client, mock_state)
         assert order_mgmt_mod._state is mock_state
+
+    def test_init_sets_trade_plans(
+        self, mock_client: AsyncMock, mock_state: MagicMock,
+        mock_trade_plans: MagicMock,
+    ) -> None:
+        """init() should set the module-level _trade_plans."""
+        order_mgmt_mod.init(mock_client, mock_state, trade_plans=mock_trade_plans)
+        assert order_mgmt_mod._trade_plans is mock_trade_plans
 
 
 # ---------------------------------------------------------------------------

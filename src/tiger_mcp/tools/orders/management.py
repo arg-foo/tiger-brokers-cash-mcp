@@ -24,11 +24,13 @@ from tiger_mcp.safety.checks import (
     run_safety_checks,
 )
 from tiger_mcp.server import mcp
+from tiger_mcp.tools.orders._helpers import format_safety_result, get_effective_config
 
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
     from tiger_mcp.config import Settings
     from tiger_mcp.safety.state import DailyState
+    from tiger_mcp.safety.trade_plan_store import TradePlanStore
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +41,16 @@ logger = logging.getLogger(__name__)
 _client: TigerClient | None = None
 _state: DailyState | None = None
 _config: Settings | None = None
+_trade_plans: TradePlanStore | None = None
 
 
 def init(
     client: TigerClient,
     state: DailyState,
     config: Settings | None = None,
+    trade_plans: TradePlanStore | None = None,
 ) -> None:
-    """Set the module-level TigerClient, DailyState, and config.
+    """Set the module-level TigerClient, DailyState, config, and trade plans.
 
     Parameters
     ----------
@@ -57,34 +61,19 @@ def init(
     config:
         Optional ``Settings`` with safety-check limits.  When ``None``
         a permissive default (all limits disabled) is used.
+    trade_plans:
+        Optional ``TradePlanStore`` for persisting trade plan metadata.
     """
-    global _client, _state, _config  # noqa: PLW0603
+    global _client, _state, _config, _trade_plans  # noqa: PLW0603
     _client = client
     _state = state
     _config = config
+    _trade_plans = trade_plans
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _get_effective_config() -> Any:
-    """Return the module-level config, or a permissive fallback.
-
-    When ``_config`` has not been set (e.g. during testing), returns a
-    namespace with all safety limits disabled (set to ``0``).
-    """
-    if _config is not None:
-        return _config
-
-    from types import SimpleNamespace
-
-    return SimpleNamespace(
-        max_order_value=0.0,
-        daily_loss_limit=0.0,
-        max_position_pct=0.0,
-    )
 
 
 def _needs_safety_checks(
@@ -121,28 +110,6 @@ def _needs_safety_checks(
         return True
 
     return False
-
-
-def _format_safety_result(result: SafetyResult) -> str:
-    """Format a SafetyResult into human-readable text.
-
-    Errors are listed under a ``SAFETY ERRORS`` heading and warnings
-    under ``SAFETY WARNINGS``.  Returns an empty string when there are
-    no issues.
-    """
-    lines: list[str] = []
-
-    if result.errors:
-        lines.append("SAFETY ERRORS:")
-        for err in result.errors:
-            lines.append(f"  - {err}")
-
-    if result.warnings:
-        lines.append("SAFETY WARNINGS:")
-        for warn in result.warnings:
-            lines.append(f"  - {warn}")
-
-    return "\n".join(lines)
 
 
 def _format_order_summary(detail: dict[str, Any]) -> str:
@@ -237,7 +204,7 @@ async def _run_modify_safety_checks(
         for p in positions
     ]
 
-    config = _get_effective_config()
+    config = get_effective_config(_config)
 
     return run_safety_checks(
         order=order_params,
@@ -259,6 +226,7 @@ async def modify_order(
     quantity: int | None = None,
     limit_price: float | None = None,
     stop_price: float | None = None,
+    reason: str = "",
 ) -> str:
     """Modify an existing order's quantity, limit price, or stop price.
 
@@ -282,6 +250,9 @@ async def modify_order(
         New limit price.  Pass ``None`` to leave unchanged.
     stop_price:
         New stop price.  Pass ``None`` to leave unchanged.
+    reason:
+        Human-readable reason for the modification. Persisted with the
+        trade plan for future reference.
 
     Returns
     -------
@@ -332,7 +303,7 @@ async def modify_order(
                 f"  Symbol: {detail.get('symbol', 'N/A')}",
                 "",
             ]
-            safety_text = _format_safety_result(safety_result)
+            safety_text = format_safety_result(safety_result)
             if safety_text:
                 lines.append(safety_text)
             return "\n".join(lines)
@@ -351,17 +322,23 @@ async def modify_order(
             "The order may no longer be modifiable."
         )
 
-    # Build response with order details and modification summary.
-    modifications: list[str] = []
+    # Record modification in trade plan store.
+    changes: dict[str, Any] = {}
     if quantity is not None:
-        modifications.append(f"quantity={quantity}")
+        changes["quantity"] = quantity
     if limit_price is not None:
-        modifications.append(f"limit_price={limit_price}")
+        changes["limit_price"] = limit_price
     if stop_price is not None:
-        modifications.append(f"stop_price={stop_price}")
+        changes["stop_price"] = stop_price
 
+    if _trade_plans is not None:
+        _trade_plans.record_modification(
+            order_id=order_id, changes=changes, reason=reason,
+        )
+
+    # Build response with order details and modification summary.
     symbol = detail.get("symbol", "N/A")
-    mod_str = ", ".join(modifications)
+    mod_str = ", ".join(f"{k}={v}" for k, v in changes.items())
 
     lines = [
         "Order Modified Successfully",
@@ -369,15 +346,19 @@ async def modify_order(
         f"  Order ID: {order_id}",
         f"  Symbol: {symbol}",
         f"  Changes: {mod_str}",
+    ]
+    if reason:
+        lines.append(f"  Reason: {reason}")
+    lines.extend([
         "",
         "Original Order:",
         _format_order_summary(detail),
-    ]
+    ])
 
     # Append safety warnings if any.
     if safety_result is not None and safety_result.warnings:
         lines.append("")
-        safety_text = _format_safety_result(safety_result)
+        safety_text = format_safety_result(safety_result)
         if safety_text:
             lines.append(safety_text)
 
@@ -385,7 +366,7 @@ async def modify_order(
 
 
 @mcp.tool()
-async def cancel_order(order_id: int) -> str:
+async def cancel_order(order_id: int, reason: str = "") -> str:
     """Cancel a single order by its ID.
 
     Validates the order exists by fetching its detail before attempting
@@ -395,6 +376,9 @@ async def cancel_order(order_id: int) -> str:
     ----------
     order_id:
         The numeric order identifier to cancel.
+    reason:
+        Human-readable reason for the cancellation. Persisted with the
+        trade plan for future reference.
 
     Returns
     -------
@@ -425,6 +409,14 @@ async def cancel_order(order_id: int) -> str:
             "The order may already be cancelled or filled."
         )
 
+    # Archive the trade plan.
+    if _trade_plans is not None:
+        _trade_plans.archive(
+            order_id=order_id,
+            reason="cancelled",
+            archive_reason=reason,
+        )
+
     symbol = detail.get("symbol", "N/A")
     action = detail.get("action", "N/A")
     quantity = detail.get("quantity", "N/A")
@@ -439,6 +431,8 @@ async def cancel_order(order_id: int) -> str:
         f"  Quantity: {quantity}",
         f"  Order Type: {order_type}",
     ]
+    if reason:
+        lines.append(f"  Reason: {reason}")
     return "\n".join(lines)
 
 
@@ -465,6 +459,10 @@ async def cancel_all_orders() -> str:
 
     if not results:
         return "No open orders to cancel."
+
+    # Archive all trade plans.
+    if _trade_plans is not None:
+        _trade_plans.archive_all(reason="cancelled")
 
     order_ids = [str(r.get("order_id", "N/A")) for r in results]
     count = len(results)
