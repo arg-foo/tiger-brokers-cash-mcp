@@ -47,10 +47,9 @@ class OrderParams:
         symbol: Ticker symbol (e.g. ``"AAPL"``).
         action: ``"BUY"`` or ``"SELL"``.
         quantity: Number of shares.
-        order_type: One of ``MKT``, ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+        order_type: One of ``LMT``, ``STP_LMT``.
         limit_price: Limit price for limit orders, or ``None``.
         stop_price: Stop price for stop orders, or ``None``.
-        last_price: Last traded price, used for market-order cost estimation.
     """
 
     symbol: str
@@ -59,7 +58,6 @@ class OrderParams:
     order_type: str
     limit_price: float | None = None
     stop_price: float | None = None
-    last_price: float | None = None
 
 
 @dataclass
@@ -96,14 +94,11 @@ _BUYING_POWER_BUFFER = 1.01  # 1% safety margin for buying power check
 
 
 def _estimate_price(order: OrderParams) -> float | None:
-    """Return the best available price estimate for an order.
+    """Return the price estimate for an order.
 
-    Prefers ``limit_price`` when set; falls back to ``last_price``.
-    Returns ``None`` when neither is available.
+    Returns ``limit_price`` when set, otherwise ``None``.
     """
-    if order.limit_price is not None:
-        return order.limit_price
-    return order.last_price
+    return order.limit_price
 
 
 # ---------------------------------------------------------------------------

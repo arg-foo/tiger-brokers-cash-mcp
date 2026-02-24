@@ -160,7 +160,7 @@ class TradePlanStore:
             symbol: Ticker symbol (e.g. ``"AAPL"``).
             action: Order action (``"BUY"`` or ``"SELL"``).
             quantity: Number of shares.
-            order_type: Order type (e.g. ``"LMT"``, ``"MKT"``, ``"STP"``).
+            order_type: Order type (e.g. ``"LMT"``, ``"STP_LMT"``).
             reason: Human-readable reason for the trade.
             limit_price: Limit price, or ``None`` for non-limit orders.
             stop_price: Stop price, or ``None`` for non-stop orders.

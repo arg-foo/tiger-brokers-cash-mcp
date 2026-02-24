@@ -18,7 +18,6 @@ from tigeropen.common.util.contract_utils import stock_contract
 from tigeropen.common.util.order_utils import (
     limit_order,
     stop_limit_order,
-    stop_order,
 )
 from tigeropen.quote.quote_client import QuoteClient
 from tigeropen.tiger_open_config import TigerOpenClientConfig
@@ -116,8 +115,7 @@ class TigerClient:
         Raises
         ------
         ValueError
-            If *order_type* is not one of ``market``, ``limit``, ``stop``,
-            or ``stop_limit``.
+            If *order_type* is not one of ``limit`` or ``stop_limit``.
         """
         contract = stock_contract(symbol=symbol, currency="USD")
 
@@ -128,14 +126,6 @@ class TigerClient:
                 action=action,
                 quantity=quantity,
                 limit_price=limit_price,
-            )
-        if order_type == "stop":
-            return stop_order(
-                account=self._account,
-                contract=contract,
-                action=action,
-                quantity=quantity,
-                aux_price=stop_price,
             )
         if order_type == "stop_limit":
             return stop_limit_order(
@@ -473,50 +463,6 @@ class TigerClient:
     # ------------------------------------------------------------------
     # Quote methods (with caching)
     # ------------------------------------------------------------------
-
-    async def get_quote(self, symbol: str) -> dict[str, Any]:
-        """Get a real-time quote for a single symbol.
-
-        Results are cached for 30 seconds.
-        """
-        cache_key = self._cache_key("quote", symbol)
-        cached = self._get_cached(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            df = await self._run_sync(
-                self._quote_client.get_stock_briefs, [symbol]
-            )
-            records = df.to_dict(orient="records")
-            result = records[0] if records else {}
-            self._set_cached(cache_key, result)
-            return result
-        except Exception as exc:
-            msg = f"get_quote failed: {exc}"
-            raise RuntimeError(msg) from exc
-
-    async def get_quotes(self, symbols: list[str]) -> list[dict[str, Any]]:
-        """Get real-time quotes for multiple symbols.
-
-        Results are cached for 30 seconds.  The cache key is based on the
-        sorted symbol list so that order does not matter.
-        """
-        cache_key = self._cache_key("quotes", *sorted(symbols))
-        cached = self._get_cached(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            df = await self._run_sync(
-                self._quote_client.get_stock_briefs, symbols
-            )
-            result = df.to_dict(orient="records")
-            self._set_cached(cache_key, result)
-            return result
-        except Exception as exc:
-            msg = f"get_quotes failed: {exc}"
-            raise RuntimeError(msg) from exc
 
     async def get_bars(
         self,

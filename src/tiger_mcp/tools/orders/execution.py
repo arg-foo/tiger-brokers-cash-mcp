@@ -50,16 +50,14 @@ _trade_plans: TradePlanStore | None = None
 
 _VALID_ACTIONS = frozenset({"BUY", "SELL"})
 _VALID_ORDER_TYPES = frozenset(
-    {"LMT", "STP", "STP_LMT", "TRAIL"},
+    {"LMT", "STP_LMT"},
 )
 
 # Map user-facing order type abbreviations to the strings expected by
 # TigerClient._build_order.
 _ORDER_TYPE_MAP: dict[str, str] = {
     "LMT": "limit",
-    "STP": "stop",
     "STP_LMT": "stop_limit",
-    "TRAIL": "trail",
 }
 
 
@@ -147,7 +145,7 @@ def _validate_order_params(
             f"limit_price is required for {order_type} orders."
         )
 
-    if order_type in ("STP", "STP_LMT") and stop_price is None:
+    if order_type == "STP_LMT" and stop_price is None:
         return (
             f"stop_price is required for {order_type} orders."
         )
@@ -157,26 +155,17 @@ def _validate_order_params(
 
 async def _fetch_safety_data(
     client: TigerClient,
-    symbol: str,
-) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
-    """Fetch quote, account, and position data from TigerClient.
-
-    The quote fetch is best-effort: if it fails (e.g. missing market
-    data permissions), an empty dict is returned and safety checks
-    that depend on ``last_price`` will gracefully degrade.
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Fetch account and position data from TigerClient.
 
     Returns
     -------
     tuple
-        ``(quote_data, account_data, positions_data)``
+        ``(account_data, positions_data)``
     """
-    try:
-        quote = await client.get_quote(symbol)
-    except Exception:
-        quote = {}
     assets = await client.get_assets()
     positions = await client.get_positions()
-    return quote, assets, positions
+    return assets, positions
 
 
 async def _build_and_run_safety(
@@ -188,19 +177,9 @@ async def _build_and_run_safety(
     order_type: str,
     limit_price: float | None,
     stop_price: float | None,
-) -> tuple[SafetyResult, float | None]:
-    """Fetch data and run all safety checks.
-
-    Returns
-    -------
-    tuple
-        ``(safety_result, last_price)`` where ``last_price`` is the
-        latest quote price (may be ``None``).
-    """
-    quote, assets, positions = await _fetch_safety_data(
-        client, symbol,
-    )
-    last_price = quote.get("latest_price")
+) -> SafetyResult:
+    """Fetch data and run all safety checks."""
+    assets, positions = await _fetch_safety_data(client)
 
     order_params = OrderParams(
         symbol=symbol,
@@ -209,7 +188,6 @@ async def _build_and_run_safety(
         order_type=order_type,
         limit_price=limit_price,
         stop_price=stop_price,
-        last_price=last_price,
     )
     account_info = AccountInfo(
         cash_balance=assets.get("cash", 0.0),
@@ -233,7 +211,7 @@ async def _build_and_run_safety(
         state=state,
     )
 
-    return safety_result, last_price
+    return safety_result
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +242,7 @@ async def preview_stock_order(
     quantity:
         Number of shares. Must be a positive integer.
     order_type:
-        One of ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+        One of ``LMT``, ``STP_LMT``.
     limit_price:
         Required for ``LMT`` and ``STP_LMT`` orders.
     stop_price:
@@ -291,7 +269,7 @@ async def preview_stock_order(
 
     # 2. Fetch data and run safety checks
     try:
-        safety_result, last_price = await _build_and_run_safety(
+        safety_result = await _build_and_run_safety(
             _client, _state, symbol, action, quantity,
             order_type, limit_price, stop_price,
         )
@@ -330,8 +308,6 @@ async def preview_stock_order(
         lines.append(f"  Limit Price:     ${limit_price:,.2f}")
     if stop_price is not None:
         lines.append(f"  Stop Price:      ${stop_price:,.2f}")
-    if last_price is not None:
-        lines.append(f"  Last Price:      ${last_price:,.2f}")
     lines.append("")
 
     if isinstance(estimated_cost, (int, float)):
@@ -380,7 +356,7 @@ async def place_stock_order(
     quantity:
         Number of shares. Must be a positive integer.
     order_type:
-        One of ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+        One of ``LMT``, ``STP_LMT``.
     reason:
         Human-readable reason for this trade (e.g. thesis, strategy).
         Persisted alongside the order for future reference.
@@ -411,7 +387,7 @@ async def place_stock_order(
 
     # 2. Fetch data and run safety checks
     try:
-        safety_result, _ = await _build_and_run_safety(
+        safety_result = await _build_and_run_safety(
             _client, _state, symbol, action, quantity,
             order_type, limit_price, stop_price,
         )

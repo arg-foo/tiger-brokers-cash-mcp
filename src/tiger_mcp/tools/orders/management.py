@@ -176,12 +176,9 @@ async def _run_modify_safety_checks(
     )
     stop_price = detail.get("aux_price")
 
-    # Fetch quote, account, and positions
-    quote = await client.get_quote(symbol)
+    # Fetch account and positions
     assets = await client.get_assets()
     positions = await client.get_positions()
-
-    last_price = quote.get("latest_price")
 
     order_params = OrderParams(
         symbol=symbol,
@@ -190,7 +187,6 @@ async def _run_modify_safety_checks(
         order_type=order_type,
         limit_price=effective_price,
         stop_price=stop_price,
-        last_price=last_price,
     )
     account_info = AccountInfo(
         cash_balance=assets.get("cash", 0.0),
