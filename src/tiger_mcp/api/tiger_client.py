@@ -17,7 +17,6 @@ from tigeropen.common.consts import BarPeriod, Language, OrderStatus
 from tigeropen.common.util.contract_utils import stock_contract
 from tigeropen.common.util.order_utils import (
     limit_order,
-    market_order,
     stop_limit_order,
     stop_order,
 )
@@ -78,11 +77,18 @@ class TigerClient:
         client_config.private_key = config.private_key_path.read_text()
         client_config.tiger_id = config.tiger_id
         client_config.account = config.tiger_account
+        client_config.license = 'TBSG'
         client_config.language = Language.en_US
 
         self._trade_client = TradeClient(client_config)
         self._quote_client = QuoteClient(client_config)
         self._account = config.tiger_account
+
+        # Log quote permissions grabbed during QuoteClient init
+        if self._quote_client.permissions:
+            logger.info("quote permissions: %s", self._quote_client.permissions)
+        else:
+            logger.warning("no quote permissions returned from grab_quote_permission")
 
         # Simple dict-based cache:  key -> (value, monotonic_timestamp)
         self._quote_cache: dict[str, tuple[Any, float]] = {}
@@ -115,13 +121,6 @@ class TigerClient:
         """
         contract = stock_contract(symbol=symbol, currency="USD")
 
-        if order_type == "market":
-            return market_order(
-                account=self._account,
-                contract=contract,
-                action=action,
-                quantity=quantity,
-            )
         if order_type == "limit":
             return limit_order(
                 account=self._account,

@@ -50,13 +50,12 @@ _trade_plans: TradePlanStore | None = None
 
 _VALID_ACTIONS = frozenset({"BUY", "SELL"})
 _VALID_ORDER_TYPES = frozenset(
-    {"MKT", "LMT", "STP", "STP_LMT", "TRAIL"},
+    {"LMT", "STP", "STP_LMT", "TRAIL"},
 )
 
 # Map user-facing order type abbreviations to the strings expected by
 # TigerClient._build_order.
 _ORDER_TYPE_MAP: dict[str, str] = {
-    "MKT": "market",
     "LMT": "limit",
     "STP": "stop",
     "STP_LMT": "stop_limit",
@@ -162,12 +161,19 @@ async def _fetch_safety_data(
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Fetch quote, account, and position data from TigerClient.
 
+    The quote fetch is best-effort: if it fails (e.g. missing market
+    data permissions), an empty dict is returned and safety checks
+    that depend on ``last_price`` will gracefully degrade.
+
     Returns
     -------
     tuple
         ``(quote_data, account_data, positions_data)``
     """
-    quote = await client.get_quote(symbol)
+    try:
+        quote = await client.get_quote(symbol)
+    except Exception:
+        quote = {}
     assets = await client.get_assets()
     positions = await client.get_positions()
     return quote, assets, positions
@@ -258,7 +264,7 @@ async def preview_stock_order(
     quantity:
         Number of shares. Must be a positive integer.
     order_type:
-        One of ``MKT``, ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+        One of ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
     limit_price:
         Required for ``LMT`` and ``STP_LMT`` orders.
     stop_price:
@@ -374,7 +380,7 @@ async def place_stock_order(
     quantity:
         Number of shares. Must be a positive integer.
     order_type:
-        One of ``MKT``, ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
+        One of ``LMT``, ``STP``, ``STP_LMT``, ``TRAIL``.
     reason:
         Human-readable reason for this trade (e.g. thesis, strategy).
         Persisted alongside the order for future reference.
