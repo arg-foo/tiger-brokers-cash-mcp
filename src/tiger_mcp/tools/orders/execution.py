@@ -10,8 +10,8 @@ Provides two tools:
 
 Client and state access pattern
 -------------------------------
-Module-level ``_client``, ``_state``, ``_config``, and ``_trade_plans``
-references are set via the ``init(client, state, config, trade_plans)``
+Module-level ``_client``, ``_state``, and ``_config``
+references are set via the ``init(client, state, config)``
 function during server startup.
 """
 
@@ -33,7 +33,6 @@ from tiger_mcp.tools.orders._helpers import format_safety_result, get_effective_
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
     from tiger_mcp.config import Settings
-    from tiger_mcp.safety.trade_plan_store import TradePlanStore
 
 # ---------------------------------------------------------------------------
 # Module-level dependencies, set by init() during server startup.
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
 _client: TigerClient | None = None
 _state: DailyState | None = None
 _config: Settings | None = None
-_trade_plans: TradePlanStore | None = None
 
 # ---------------------------------------------------------------------------
 # Valid values for user-facing parameters.
@@ -65,12 +63,11 @@ def init(
     client: TigerClient,
     state: DailyState,
     config: Settings | None = None,
-    trade_plans: TradePlanStore | None = None,
 ) -> None:
     """Set the module-level dependencies.
 
     Called once during server initialisation so that tool functions can
-    access the shared client, state, configuration, and trade plan store.
+    access the shared client, state, and configuration.
 
     Parameters
     ----------
@@ -81,14 +78,11 @@ def init(
     config:
         Optional ``Settings`` with safety-check limits.  When ``None``
         a permissive default (all limits disabled) is used.
-    trade_plans:
-        Optional ``TradePlanStore`` for persisting trade plan metadata.
     """
-    global _client, _state, _config, _trade_plans  # noqa: PLW0603
+    global _client, _state, _config  # noqa: PLW0603
     _client = client
     _state = state
     _config = config
-    _trade_plans = trade_plans
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +330,6 @@ async def place_stock_order(
     action: str,
     quantity: int,
     order_type: str,
-    reason: str,
     limit_price: float | None = None,
     stop_price: float | None = None,
 ) -> str:
@@ -357,9 +350,6 @@ async def place_stock_order(
         Number of shares. Must be a positive integer.
     order_type:
         One of ``LMT``, ``STP_LMT``.
-    reason:
-        Human-readable reason for this trade (e.g. thesis, strategy).
-        Persisted alongside the order for future reference.
     limit_price:
         Required for ``LMT`` and ``STP_LMT`` orders.
     stop_price:
@@ -368,7 +358,7 @@ async def place_stock_order(
     Returns
     -------
     str
-        On success: order_id, status, fill details, reason, and any warnings.
+        On success: order_id, status, fill details, and any warnings.
         On safety error: error messages explaining why the order was
         blocked.
     """
@@ -432,24 +422,9 @@ async def place_stock_order(
     )
     _state.record_order(fingerprint)
 
-    # 6. Create trade plan if store is available
     order_id = order_result.get("order_id", "N/A")
-    if _trade_plans is not None and isinstance(order_id, int):
-        try:
-            _trade_plans.create(
-                order_id=order_id,
-                symbol=symbol,
-                action=action,
-                quantity=quantity,
-                order_type=order_type,
-                reason=reason,
-                limit_price=limit_price,
-                stop_price=stop_price,
-            )
-        except Exception:
-            pass  # Order was placed successfully; plan persistence is best-effort
 
-    # 7. Format success response
+    # 6. Format success response
     o_symbol = order_result.get("symbol", symbol)
     o_action = order_result.get("action", action)
     o_qty = order_result.get("quantity", quantity)
@@ -463,7 +438,6 @@ async def place_stock_order(
         f"  Action:      {o_action}",
         f"  Quantity:    {o_qty}",
         f"  Order Type:  {o_type}",
-        f"  Reason:      {reason}",
     ]
 
     safety_text = format_safety_result(safety_result)

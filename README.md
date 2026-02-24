@@ -106,14 +106,14 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
 | `get_stock_quotes` | Batch quotes for up to 50 comma-separated symbols |
 | `get_stock_bars` | OHLCV bar data. Params: `symbol`, `period` (`1d`, `1w`, `1m`, `3m`, `6m`, `1y`), `limit` |
 
-### Orders (9 tools)
+### Orders (7 tools)
 
 #### Execution
 
 | Tool | Description |
 |------|-------------|
 | `preview_stock_order` | Simulates an order with all safety checks. Returns estimated cost, commission, and safety results without executing |
-| `place_stock_order` | Places an order after passing all safety checks. Params: `symbol`, `action` (BUY/SELL), `quantity`, `order_type` (MKT, LMT, STP, STP_LMT, TRAIL), optional `limit_price`/`stop_price`, required `reason` |
+| `place_stock_order` | Places an order after passing all safety checks. Params: `symbol`, `action` (BUY/SELL), `quantity`, `order_type` (LMT, STP_LMT), optional `limit_price`/`stop_price` |
 
 #### Management
 
@@ -129,13 +129,6 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
 |------|-------------|
 | `get_open_orders` | Lists open/partially-filled orders. Optional `symbol` filter |
 | `get_order_detail` | Full details for a specific order by ID |
-
-#### Trade Plans
-
-| Tool | Description |
-|------|-------------|
-| `get_trade_plans` | Lists all active trade plans with reasons and modification history |
-| `mark_order_filled` | Archives a trade plan as filled |
 
 ## Safety System
 
