@@ -224,8 +224,13 @@ class TigerClient:
         net liquidation value, cash balance, etc.
         """
         try:
-            assets = await self._run_sync(self._trade_client.get_assets)
-            return assets.summary()
+            accounts = await self._run_sync(self._trade_client.get_assets)
+            for acct in accounts:
+                if acct.account == self._account:
+                    return vars(acct.summary)
+            if accounts:
+                return vars(accounts[0].summary)
+            return {}
         except Exception as exc:
             msg = f"get_assets failed: {exc}"
             raise RuntimeError(msg) from exc
