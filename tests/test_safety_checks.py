@@ -8,8 +8,7 @@ Covers all 6 safety checks:
   5. Daily loss limit
   6. Duplicate detection (warning)
 
-Also tests combined failures, disabled checks (limit=0), and market
-order cost estimation via last_price.
+Also tests combined failures and disabled checks (limit=0).
 """
 
 from __future__ import annotations
@@ -690,76 +689,3 @@ class TestDisabledChecks:
         assert conc_warns == []
 
 
-# ---------------------------------------------------------------------------
-# Market order uses last_price for estimation
-# ---------------------------------------------------------------------------
-
-
-class TestMarketOrderEstimation:
-    def test_market_order_uses_last_price(
-        self,
-        account: AccountInfo,
-        positions: list[PositionInfo],
-        mock_state: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        key_file = tmp_path / "private.pem"
-        key_file.write_text("fake-key")
-        config = Settings(
-            tiger_id="test_id",
-            tiger_account="test_account",
-            private_key_path=key_file,
-            max_order_value=10_000.0,
-            daily_loss_limit=0.0,
-            max_position_pct=0.0,
-        )
-        order = OrderParams(
-            symbol="AAPL",
-            action="BUY",
-            quantity=100,
-            order_type="MKT",
-            limit_price=None,
-            last_price=150.0,
-        )
-        result = run_safety_checks(
-            order, account, positions, config, mock_state
-        )
-        assert result.passed is False
-        assert _has_match(
-            result.errors, "max order", "order value"
-        )
-
-    def test_limit_price_preferred_over_last(
-        self,
-        account: AccountInfo,
-        positions: list[PositionInfo],
-        mock_state: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        key_file = tmp_path / "private.pem"
-        key_file.write_text("fake-key")
-        config = Settings(
-            tiger_id="test_id",
-            tiger_account="test_account",
-            private_key_path=key_file,
-            max_order_value=12_000.0,
-            daily_loss_limit=0.0,
-            max_position_pct=0.0,
-        )
-        # limit=150 -> value=15,000 > 12,000 (triggers)
-        # last=100 -> value=10,000 < 12,000 (would pass)
-        order = OrderParams(
-            symbol="AAPL",
-            action="BUY",
-            quantity=100,
-            order_type="LMT",
-            limit_price=150.0,
-            last_price=100.0,
-        )
-        result = run_safety_checks(
-            order, account, positions, config, mock_state
-        )
-        assert result.passed is False
-        assert _has_match(
-            result.errors, "max order", "order value"
-        )

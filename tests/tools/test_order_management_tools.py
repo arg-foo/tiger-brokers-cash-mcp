@@ -102,16 +102,14 @@ def _make_sell_order_detail(
     }
 
 
-def _setup_quote_and_positions(
+def _setup_account_and_positions(
     mock_client: AsyncMock,
     *,
-    latest_price: float = 150.0,
     cash: float = 500_000.0,
     net_liquidation: float = 1_000_000.0,
     positions: list[dict] | None = None,
 ) -> None:
-    """Configure mock_client with quote, account, and position data."""
-    mock_client.get_quote.return_value = {"latest_price": latest_price}
+    """Configure mock_client with account and position data."""
     mock_client.get_assets.return_value = {
         "cash": cash,
         "net_liquidation": net_liquidation,
@@ -133,7 +131,7 @@ class TestModifyOrder:
     ) -> None:
         """modify_order should succeed when changing the quantity."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345,
             "modified": True,
@@ -157,7 +155,7 @@ class TestModifyOrder:
     ) -> None:
         """modify_order should succeed when changing the limit price."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345,
             "modified": True,
@@ -208,7 +206,7 @@ class TestModifyOrder:
     ) -> None:
         """modify_order response should include order details."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345,
             "modified": True,
@@ -228,7 +226,7 @@ class TestModifyOrder:
     ) -> None:
         """modify_order should return error when the modify API call fails."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.side_effect = RuntimeError(
             "modify_order failed: Network error"
         )
@@ -246,7 +244,7 @@ class TestModifyOrder:
     ) -> None:
         """modify_order should fetch account data when quantity increases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(
+        _setup_account_and_positions(
             mock_client, cash=50000.0, net_liquidation=100000.0,
         )
         mock_client.modify_order.return_value = {
@@ -281,7 +279,6 @@ class TestModifyOrder:
 
         # Should NOT have fetched account data
         mock_client.get_assets.assert_not_awaited()
-        mock_client.get_quote.assert_not_awaited()
         mock_client.get_positions.assert_not_awaited()
         assert "modified" in result.lower() or "Modified" in result
 
@@ -293,7 +290,7 @@ class TestModifyOrder:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         # Cash is less than what the increased quantity would cost
         # 200 shares * $150 * 1.01 buffer = $30,300 but only $100 cash
-        _setup_quote_and_positions(
+        _setup_account_and_positions(
             mock_client, cash=100.0, net_liquidation=100.0,
         )
 
@@ -320,7 +317,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
             quantity=100, limit_price=150.0,
         )
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345,
             "modified": True,
@@ -331,8 +328,7 @@ class TestModifyOrderFullSafetyChecks:
             order_id=12345, quantity=200
         )
 
-        # Should have fetched quote, account, and positions
-        mock_client.get_quote.assert_awaited_once()
+        # Should have fetched account and positions
         mock_client.get_assets.assert_awaited_once()
         mock_client.get_positions.assert_awaited_once()
         assert "Modified" in result
@@ -345,7 +341,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
             quantity=100, limit_price=150.0,
         )
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345,
             "modified": True,
@@ -357,7 +353,6 @@ class TestModifyOrderFullSafetyChecks:
         )
 
         # Safety checks should have been triggered for price change on BUY
-        mock_client.get_quote.assert_awaited_once()
         mock_client.get_assets.assert_awaited_once()
         mock_client.get_positions.assert_awaited_once()
         assert "Modified" in result
@@ -374,7 +369,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
             quantity=100, limit_price=150.0,
         )
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
 
         result = await order_mgmt_mod.modify_order(
             order_id=12345, quantity=200
@@ -400,7 +395,7 @@ class TestModifyOrderFullSafetyChecks:
         # But limit is 5% so: $30,000 > 5% * $1M = $50,000? No.
         # Need net_liquidation to be small so the warning fires.
         # 200 * 150 = $30,000 > 5% * $100,000 = $5,000 => warning fires
-        _setup_quote_and_positions(
+        _setup_account_and_positions(
             mock_client,
             cash=500_000.0,
             net_liquidation=100_000.0,
@@ -438,8 +433,7 @@ class TestModifyOrderFullSafetyChecks:
             order_id=12345, quantity=200
         )
 
-        # Should NOT fetch quote/account/positions for SELL orders
-        mock_client.get_quote.assert_not_awaited()
+        # Should NOT fetch account/positions for SELL orders
         mock_client.get_assets.assert_not_awaited()
         mock_client.get_positions.assert_not_awaited()
         assert "Modified" in result
@@ -463,7 +457,6 @@ class TestModifyOrderFullSafetyChecks:
         )
 
         # Lowering price is not increasing risk; skip safety checks
-        mock_client.get_quote.assert_not_awaited()
         mock_client.get_assets.assert_not_awaited()
         mock_client.get_positions.assert_not_awaited()
         assert "Modified" in result
@@ -472,9 +465,9 @@ class TestModifyOrderFullSafetyChecks:
         self,
         mock_client: AsyncMock,
     ) -> None:
-        """modify_order should return error when market data fetch fails."""
+        """modify_order should return error when account data fetch fails."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        mock_client.get_quote.side_effect = RuntimeError("Quote fetch failed")
+        mock_client.get_assets.side_effect = RuntimeError("Account fetch failed")
 
         result = await order_mgmt_mod.modify_order(
             order_id=12345, quantity=200
@@ -495,7 +488,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_state.get_daily_pnl.return_value = -1500.0
 
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
 
         result = await order_mgmt_mod.modify_order(
             order_id=12345, quantity=200
@@ -694,7 +687,7 @@ class TestModifyOrderTradePlan:
     ) -> None:
         """modify_order should record modification in trade plan store."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345, "modified": True, "result": None,
         }
@@ -715,7 +708,7 @@ class TestModifyOrderTradePlan:
     ) -> None:
         """modify_order should include reason in the response."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
-        _setup_quote_and_positions(mock_client)
+        _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
             "order_id": 12345, "modified": True, "result": None,
         }

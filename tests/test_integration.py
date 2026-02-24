@@ -1,7 +1,7 @@
 """Integration tests for server wiring and tool registration.
 
 Verifies that:
-- All 16 tools are registered with the FastMCP server instance.
+- All 14 tools are registered with the FastMCP server instance.
 - Tool modules are importable and register their tools at import time.
 - main() creates TigerClient / DailyState / TradePlanStore and calls init() on each module.
 - The server can be imported without real credentials (no side effects).
@@ -30,13 +30,13 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    """Verify all 16 tools are registered with the MCP server instance."""
+    """Verify all 14 tools are registered with the MCP server instance."""
 
-    def test_all_16_tools_registered(self) -> None:
-        """Importing the server module should result in 16 registered tools."""
+    def test_all_14_tools_registered(self) -> None:
+        """Importing the server module should result in 14 registered tools."""
         tool_names = _get_registered_tool_names()
-        assert len(tool_names) == 16, (
-            f"Expected 16 tools to be registered, got {len(tool_names)}. "
+        assert len(tool_names) == 14, (
+            f"Expected 14 tools to be registered, got {len(tool_names)}. "
             f"Tool names: {sorted(tool_names)}"
         )
 
@@ -54,11 +54,9 @@ class TestToolRegistration:
         )
 
     def test_market_data_tools_registered(self) -> None:
-        """The three market data tools must be registered."""
+        """The market data tool must be registered."""
         tool_names = _get_registered_tool_names()
         expected = {
-            "get_stock_quote",
-            "get_stock_quotes",
             "get_stock_bars",
         }
         assert expected.issubset(tool_names), (

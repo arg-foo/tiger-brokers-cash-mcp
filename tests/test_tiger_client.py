@@ -6,7 +6,6 @@ All tests mock the tigeropen SDK so no real API calls are made.
 from __future__ import annotations
 
 import inspect
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -194,8 +193,6 @@ class TestAsyncWrapping:
             "cancel_all_orders",
             "get_open_orders",
             "get_order_detail",
-            "get_quote",
-            "get_quotes",
             "get_bars",
         ]
         for method_name in public_methods:
@@ -324,30 +321,12 @@ class TestOrderMethods:
             symbol="AAPL",
             action="BUY",
             quantity=10,
-            order_type="market",
+            order_type="limit",
+            limit_price=150.0,
         )
 
         mock_trade_client.preview_order.assert_called_once()
         assert isinstance(result, dict)
-
-    async def test_place_order_market(
-        self,
-        tiger_client: Any,
-        mock_trade_client: MagicMock,
-    ) -> None:
-        """place_order() with market order type should work."""
-        mock_trade_client.place_order.return_value = 12345
-
-        result = await tiger_client.place_order(
-            symbol="AAPL",
-            action="BUY",
-            quantity=10,
-            order_type="market",
-        )
-
-        mock_trade_client.place_order.assert_called_once()
-        assert isinstance(result, dict)
-        assert result["order_id"] == 12345
 
     async def test_place_order_limit(
         self,
@@ -367,25 +346,6 @@ class TestOrderMethods:
 
         mock_trade_client.place_order.assert_called_once()
         assert result["order_id"] == 12346
-
-    async def test_place_order_stop(
-        self,
-        tiger_client: Any,
-        mock_trade_client: MagicMock,
-    ) -> None:
-        """place_order() with stop order type should pass stop_price."""
-        mock_trade_client.place_order.return_value = 12347
-
-        result = await tiger_client.place_order(
-            symbol="AAPL",
-            action="SELL",
-            quantity=5,
-            order_type="stop",
-            stop_price=140.0,
-        )
-
-        mock_trade_client.place_order.assert_called_once()
-        assert result["order_id"] == 12347
 
     async def test_place_order_stop_limit(
         self,
@@ -507,43 +467,6 @@ class TestOrderMethods:
 class TestQuoteMethods:
     """Test market data / quote async methods."""
 
-    async def test_get_quote_calls_sdk(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """get_quote() should call QuoteClient.get_stock_briefs()."""
-        df = pd.DataFrame(
-            [{"symbol": "AAPL", "latest_price": 150.0, "volume": 1_000_000}]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        result = await tiger_client.get_quote("AAPL")
-
-        mock_quote_client.get_stock_briefs.assert_called_once()
-        assert isinstance(result, dict)
-        assert result["symbol"] == "AAPL"
-
-    async def test_get_quotes_calls_sdk(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """get_quotes() should call QuoteClient.get_stock_briefs()."""
-        df = pd.DataFrame(
-            [
-                {"symbol": "AAPL", "latest_price": 150.0},
-                {"symbol": "GOOGL", "latest_price": 170.0},
-            ]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        result = await tiger_client.get_quotes(["AAPL", "GOOGL"])
-
-        mock_quote_client.get_stock_briefs.assert_called_once()
-        assert isinstance(result, list)
-        assert len(result) == 2
-
     async def test_get_bars_calls_sdk(
         self,
         tiger_client: Any,
@@ -585,110 +508,7 @@ class TestQuoteMethods:
 
 
 class TestQuoteCache:
-    """Test that quote data is cached for 30 seconds."""
-
-    async def test_get_quote_caches_result(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """Second call within 30s should return cached data, not call SDK."""
-        df = pd.DataFrame(
-            [{"symbol": "AAPL", "latest_price": 150.0}]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        result1 = await tiger_client.get_quote("AAPL")
-        result2 = await tiger_client.get_quote("AAPL")
-
-        # SDK should only be called once
-        assert mock_quote_client.get_stock_briefs.call_count == 1
-        assert result1 == result2
-
-    async def test_get_quote_cache_expires(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """After 30 seconds the cache should expire and hit API again."""
-        df = pd.DataFrame(
-            [{"symbol": "AAPL", "latest_price": 150.0}]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        await tiger_client.get_quote("AAPL")
-
-        # Simulate cache expiry by manipulating timestamps
-        for key in tiger_client._quote_cache:
-            tiger_client._quote_cache[key] = (
-                tiger_client._quote_cache[key][0],
-                time.monotonic() - 31,
-            )
-
-        await tiger_client.get_quote("AAPL")
-
-        assert mock_quote_client.get_stock_briefs.call_count == 2
-
-    async def test_get_quotes_caches_result(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """get_quotes() should also use caching."""
-        df = pd.DataFrame(
-            [
-                {"symbol": "AAPL", "latest_price": 150.0},
-                {"symbol": "GOOGL", "latest_price": 170.0},
-            ]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        await tiger_client.get_quotes(["AAPL", "GOOGL"])
-        await tiger_client.get_quotes(["AAPL", "GOOGL"])
-
-        assert mock_quote_client.get_stock_briefs.call_count == 1
-
-    async def test_get_quotes_cache_expires(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """get_quotes() cache should expire after 30 seconds."""
-        df = pd.DataFrame(
-            [{"symbol": "AAPL", "latest_price": 150.0}]
-        )
-        mock_quote_client.get_stock_briefs.return_value = df
-
-        await tiger_client.get_quotes(["AAPL"])
-
-        for key in tiger_client._quote_cache:
-            tiger_client._quote_cache[key] = (
-                tiger_client._quote_cache[key][0],
-                time.monotonic() - 31,
-            )
-
-        await tiger_client.get_quotes(["AAPL"])
-
-        assert mock_quote_client.get_stock_briefs.call_count == 2
-
-    async def test_different_symbols_not_cached_together(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """Different symbols should have separate cache entries."""
-        df_aapl = pd.DataFrame(
-            [{"symbol": "AAPL", "latest_price": 150.0}]
-        )
-        df_googl = pd.DataFrame(
-            [{"symbol": "GOOGL", "latest_price": 170.0}]
-        )
-        mock_quote_client.get_stock_briefs.side_effect = [df_aapl, df_googl]
-
-        await tiger_client.get_quote("AAPL")
-        await tiger_client.get_quote("GOOGL")
-
-        assert mock_quote_client.get_stock_briefs.call_count == 2
+    """Test that bar data is not cached."""
 
     async def test_bars_are_not_cached(
         self,
@@ -743,21 +563,9 @@ class TestErrorHandling:
                 symbol="AAPL",
                 action="BUY",
                 quantity=10,
-                order_type="market",
+                order_type="limit",
+                limit_price=150.0,
             )
-
-    async def test_get_quote_error_wraps_exception(
-        self,
-        tiger_client: Any,
-        mock_quote_client: MagicMock,
-    ) -> None:
-        """SDK exception from get_quote() should become RuntimeError."""
-        mock_quote_client.get_stock_briefs.side_effect = Exception(
-            "Symbol not found"
-        )
-
-        with pytest.raises(RuntimeError, match="get_quote.*Symbol not found"):
-            await tiger_client.get_quote("INVALID")
 
     async def test_cancel_order_error_wraps_exception(
         self,
@@ -825,20 +633,6 @@ class TestErrorHandling:
 class TestBuildOrder:
     """Test the _build_order helper method."""
 
-    def test_build_market_order(self, tiger_client: Any) -> None:
-        """_build_order with market type should use market_order utility."""
-        with patch(
-            "tiger_mcp.api.tiger_client.market_order"
-        ) as mock_market_order:
-            mock_market_order.return_value = MagicMock()
-            tiger_client._build_order(
-                symbol="AAPL",
-                action="BUY",
-                quantity=10,
-                order_type="market",
-            )
-            mock_market_order.assert_called_once()
-
     def test_build_limit_order(self, tiger_client: Any) -> None:
         """_build_order with limit type should use limit_order utility."""
         with patch(
@@ -853,21 +647,6 @@ class TestBuildOrder:
                 limit_price=150.0,
             )
             mock_limit_order.assert_called_once()
-
-    def test_build_stop_order(self, tiger_client: Any) -> None:
-        """_build_order with stop type should use stop_order utility."""
-        with patch(
-            "tiger_mcp.api.tiger_client.stop_order"
-        ) as mock_stop_order:
-            mock_stop_order.return_value = MagicMock()
-            tiger_client._build_order(
-                symbol="AAPL",
-                action="SELL",
-                quantity=5,
-                order_type="stop",
-                stop_price=140.0,
-            )
-            mock_stop_order.assert_called_once()
 
     def test_build_stop_limit_order(self, tiger_client: Any) -> None:
         """_build_order with stop_limit type should use stop_limit_order."""

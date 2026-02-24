@@ -1,8 +1,7 @@
 """Tests for market data MCP tools.
 
-Covers get_stock_quote, get_stock_quotes, and get_stock_bars with
-mocked TigerClient, including parameter validation, response formatting,
-and error handling.
+Covers get_stock_bars with mocked TigerClient, including parameter
+validation, response formatting, and error handling.
 """
 
 from __future__ import annotations
@@ -20,43 +19,6 @@ import pytest
 def mock_client() -> AsyncMock:
     """Return a mock TigerClient with pre-configured return values."""
     client = AsyncMock()
-
-    # Default single-quote response
-    client.get_quote.return_value = {
-        "symbol": "AAPL",
-        "latest_price": 185.50,
-        "bid_price": 185.45,
-        "ask_price": 185.55,
-        "volume": 45_123_456,
-        "change": 2.30,
-        "change_ratio": 0.0125,
-        "open": 183.20,
-        "high": 186.00,
-        "low": 182.90,
-        "prev_close": 183.20,
-    }
-
-    # Default multi-quote response
-    client.get_quotes.return_value = [
-        {
-            "symbol": "AAPL",
-            "latest_price": 185.50,
-            "bid_price": 185.45,
-            "ask_price": 185.55,
-            "volume": 45_123_456,
-            "change": 2.30,
-            "change_ratio": 0.0125,
-        },
-        {
-            "symbol": "GOOGL",
-            "latest_price": 141.80,
-            "bid_price": 141.75,
-            "ask_price": 141.85,
-            "volume": 22_456_789,
-            "change": -1.20,
-            "change_ratio": -0.0084,
-        },
-    ]
 
     # Default bars response
     client.get_bars.return_value = [
@@ -87,233 +49,6 @@ def _init_market_tools(mock_client: AsyncMock) -> None:
     from tiger_mcp.tools.market_data.tools import init
 
     init(mock_client)
-
-
-# ---------------------------------------------------------------------------
-# get_stock_quote tests
-# ---------------------------------------------------------------------------
-
-
-class TestGetStockQuote:
-    """Tests for the get_stock_quote MCP tool."""
-
-    async def test_returns_formatted_quote(self, mock_client: AsyncMock) -> None:
-        """get_stock_quote returns a human-readable formatted string."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        result = await get_stock_quote(symbol="AAPL")
-
-        mock_client.get_quote.assert_awaited_once_with("AAPL")
-        assert "AAPL" in result
-        assert "185.50" in result
-
-    async def test_contains_bid_ask(self, mock_client: AsyncMock) -> None:
-        """Result includes bid and ask prices."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        result = await get_stock_quote(symbol="AAPL")
-
-        assert "185.45" in result
-        assert "185.55" in result
-
-    async def test_contains_volume(self, mock_client: AsyncMock) -> None:
-        """Result includes volume information."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        result = await get_stock_quote(symbol="AAPL")
-
-        assert "45,123,456" in result or "45123456" in result
-
-    async def test_contains_change(self, mock_client: AsyncMock) -> None:
-        """Result includes change and change percentage."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        result = await get_stock_quote(symbol="AAPL")
-
-        assert "2.30" in result or "2.3" in result
-        # Percentage should be present (1.25%)
-        assert "1.25" in result
-
-    async def test_symbol_uppercased(self, mock_client: AsyncMock) -> None:
-        """Lowercase symbols should be uppercased automatically."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        await get_stock_quote(symbol="aapl")
-
-        mock_client.get_quote.assert_awaited_once_with("AAPL")
-
-    async def test_symbol_trimmed(self, mock_client: AsyncMock) -> None:
-        """Whitespace around the symbol should be trimmed."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        await get_stock_quote(symbol="  AAPL  ")
-
-        mock_client.get_quote.assert_awaited_once_with("AAPL")
-
-    async def test_empty_symbol_raises(self) -> None:
-        """Empty symbol string should raise ValueError."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        with pytest.raises(ValueError, match="[Ss]ymbol"):
-            await get_stock_quote(symbol="")
-
-    async def test_whitespace_only_symbol_raises(self) -> None:
-        """Symbol that is only whitespace should raise ValueError."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        with pytest.raises(ValueError, match="[Ss]ymbol"):
-            await get_stock_quote(symbol="   ")
-
-    async def test_client_error_propagates(self, mock_client: AsyncMock) -> None:
-        """RuntimeError from TigerClient should propagate to caller."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quote
-
-        mock_client.get_quote.side_effect = RuntimeError("API error")
-
-        with pytest.raises(RuntimeError, match="API error"):
-            await get_stock_quote(symbol="AAPL")
-
-
-# ---------------------------------------------------------------------------
-# get_stock_quotes tests
-# ---------------------------------------------------------------------------
-
-
-class TestGetStockQuotes:
-    """Tests for the get_stock_quotes MCP tool."""
-
-    async def test_returns_formatted_multi_quote(
-        self, mock_client: AsyncMock
-    ) -> None:
-        """get_stock_quotes returns formatted text for multiple symbols."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        result = await get_stock_quotes(symbols="AAPL,GOOGL")
-
-        mock_client.get_quotes.assert_awaited_once_with(["AAPL", "GOOGL"])
-        assert "AAPL" in result
-        assert "GOOGL" in result
-
-    async def test_contains_prices_for_each_symbol(
-        self, mock_client: AsyncMock
-    ) -> None:
-        """Each symbol section should contain price data."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        result = await get_stock_quotes(symbols="AAPL,GOOGL")
-
-        assert "185.50" in result
-        assert "141.80" in result
-
-    async def test_parses_with_whitespace(self, mock_client: AsyncMock) -> None:
-        """Whitespace around symbols in the comma-separated string is trimmed."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        await get_stock_quotes(symbols="  AAPL , GOOGL  ")
-
-        mock_client.get_quotes.assert_awaited_once_with(["AAPL", "GOOGL"])
-
-    async def test_uppercases_symbols(self, mock_client: AsyncMock) -> None:
-        """Lowercase symbols should be uppercased."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        await get_stock_quotes(symbols="aapl,googl")
-
-        mock_client.get_quotes.assert_awaited_once_with(["AAPL", "GOOGL"])
-
-    async def test_empty_string_raises(self) -> None:
-        """Empty symbols string should raise ValueError."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        with pytest.raises(ValueError, match="[Ss]ymbol"):
-            await get_stock_quotes(symbols="")
-
-    async def test_whitespace_only_raises(self) -> None:
-        """Whitespace-only symbols string should raise ValueError."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        with pytest.raises(ValueError, match="[Ss]ymbol"):
-            await get_stock_quotes(symbols="   ")
-
-    async def test_too_many_symbols_raises(self) -> None:
-        """More than 50 symbols should raise ValueError."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        # 51 symbols
-        symbols = ",".join(f"SYM{i}" for i in range(51))
-
-        with pytest.raises(ValueError, match="50"):
-            await get_stock_quotes(symbols=symbols)
-
-    async def test_exactly_50_symbols_allowed(
-        self, mock_client: AsyncMock
-    ) -> None:
-        """Exactly 50 symbols should be accepted without error."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        symbols_list = [f"SYM{i}" for i in range(50)]
-        mock_client.get_quotes.return_value = [
-            {"symbol": s, "latest_price": 100.0, "bid_price": 99.0,
-             "ask_price": 101.0, "volume": 1000, "change": 0.5,
-             "change_ratio": 0.005}
-            for s in symbols_list
-        ]
-
-        await get_stock_quotes(symbols=",".join(symbols_list))
-
-        assert mock_client.get_quotes.await_count == 1
-
-    async def test_deduplicates_symbols(self, mock_client: AsyncMock) -> None:
-        """Duplicate symbols should be removed."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        mock_client.get_quotes.return_value = [
-            {
-                "symbol": "AAPL",
-                "latest_price": 185.50,
-                "bid_price": 185.45,
-                "ask_price": 185.55,
-                "volume": 45_123_456,
-                "change": 2.30,
-                "change_ratio": 0.0125,
-            },
-        ]
-
-        await get_stock_quotes(symbols="AAPL,aapl,AAPL")
-
-        # Should be called with deduplicated list
-        call_args = mock_client.get_quotes.call_args[0][0]
-        assert call_args == ["AAPL"]
-
-    async def test_filters_empty_entries(self, mock_client: AsyncMock) -> None:
-        """Empty entries from trailing commas should be filtered out."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        mock_client.get_quotes.return_value = [
-            {
-                "symbol": "AAPL",
-                "latest_price": 185.50,
-                "bid_price": 185.45,
-                "ask_price": 185.55,
-                "volume": 45_123_456,
-                "change": 2.30,
-                "change_ratio": 0.0125,
-            },
-        ]
-
-        await get_stock_quotes(symbols="AAPL,,")
-
-        call_args = mock_client.get_quotes.call_args[0][0]
-        assert call_args == ["AAPL"]
-
-    async def test_client_error_propagates(self, mock_client: AsyncMock) -> None:
-        """RuntimeError from TigerClient should propagate."""
-        from tiger_mcp.tools.market_data.tools import get_stock_quotes
-
-        mock_client.get_quotes.side_effect = RuntimeError("API error")
-
-        with pytest.raises(RuntimeError, match="API error"):
-            await get_stock_quotes(symbols="AAPL,GOOGL")
 
 
 # ---------------------------------------------------------------------------
@@ -453,15 +188,9 @@ class TestToolRegistration:
     """Verify tools are properly registered with the MCP server."""
 
     def test_tools_are_decorated(self) -> None:
-        """All three tool functions should be importable."""
-        from tiger_mcp.tools.market_data.tools import (
-            get_stock_bars,
-            get_stock_quote,
-            get_stock_quotes,
-        )
+        """The get_stock_bars tool function should be importable."""
+        from tiger_mcp.tools.market_data.tools import get_stock_bars
 
-        assert callable(get_stock_quote)
-        assert callable(get_stock_quotes)
         assert callable(get_stock_bars)
 
     def test_init_function_exists(self) -> None:
