@@ -98,13 +98,11 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
 | `get_positions` | Lists all current holdings with quantity, average cost, market value, and unrealized P&L |
 | `get_transaction_history` | Returns execution history. Optional filters: `symbol`, `start_date`, `end_date`, `limit` |
 
-### Market Data (3 tools)
+### Market Data (1 tool)
 
 | Tool | Description |
 |------|-------------|
-| `get_stock_quote` | Real-time quote for a single symbol (price, bid/ask, volume, change) |
-| `get_stock_quotes` | Batch quotes for up to 50 comma-separated symbols |
-| `get_stock_bars` | OHLCV bar data. Params: `symbol`, `period` (`1d`, `1w`, `1m`, `3m`, `6m`, `1y`), `limit` |
+| `get_stock_bars` | Historical OHLCV bar data. Params: `symbol`, `period` (`1d`, `1w`, `1m`, `3m`, `6m`, `1y`), `limit` |
 
 ### Orders (7 tools)
 
@@ -113,7 +111,7 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
 | Tool | Description |
 |------|-------------|
 | `preview_stock_order` | Simulates an order with all safety checks. Returns estimated cost, commission, and safety results without executing |
-| `place_stock_order` | Places an order after passing all safety checks. Params: `symbol`, `action` (BUY/SELL), `quantity`, `order_type` (LMT, STP_LMT), optional `limit_price`/`stop_price` |
+| `place_stock_order` | Places an order after passing all safety checks. Params: `symbol`, `action` (BUY/SELL), `quantity`, `order_type` (LMT, STP_LMT), `limit_price` (required), `stop_price` (required for STP_LMT) |
 
 #### Management
 
@@ -157,6 +155,7 @@ Six pre-trade checks run automatically before every order placement:
 | `TIGER_MAX_ORDER_VALUE` | No | `0` | Max single order value in USD (0 = unlimited) |
 | `TIGER_DAILY_LOSS_LIMIT` | No | `0` | Max daily realized loss in USD (0 = unlimited) |
 | `TIGER_MAX_POSITION_PCT` | No | `0` | Max position as fraction of portfolio, e.g. `0.25` (0 = unlimited) |
+| `TIGER_STATE_DIR` | No | `~/.tiger-mcp/state` | Directory for persistent state files (daily P&L, order dedup) |
 | `MCP_TRANSPORT` | No | `stdio` | Transport protocol: `stdio` or `streamable-http` |
 | `MCP_HOST` | No | `0.0.0.0` | Bind host for HTTP transport |
 | `MCP_PORT` | No | `8000` | Bind port for HTTP transport |
@@ -166,7 +165,7 @@ Six pre-trade checks run automatically before every order placement:
 | Mount | Purpose |
 |-------|---------|
 | `./private.pem:/secrets/private.pem:ro` | RSA private key (read-only) |
-| `tiger-state:/data/state` | Persistent trade state (daily P&L, trade plans) |
+| `tiger-state:/data/state` | Persistent state (daily P&L tracking, duplicate order detection) |
 
 ## Local Development (without Docker)
 
