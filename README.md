@@ -176,7 +176,7 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the server (stdio transport)
-uv run python -m tiger_mcp
+uv run --env-file .env python -m tiger_mcp
 
 # Run tests
 uv run pytest
