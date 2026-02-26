@@ -153,10 +153,10 @@ async def get_order_detail(order_id: int) -> str:
 
     try:
         detail = await _client.get_order_detail(order_id=order_id)
-    except Exception:
+    except Exception as exc:
         return (
             f"Error: Could not retrieve order {order_id}. "
-            "Please verify the order ID is correct."
+            f"Details: {exc}"
         )
 
     return _format_order_detail(detail)

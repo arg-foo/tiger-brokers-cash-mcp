@@ -261,10 +261,10 @@ async def modify_order(
         detail: dict[str, Any] = await _client.get_order_detail(
             order_id=order_id,
         )
-    except Exception:
+    except Exception as exc:
         return (
             f"Error: Could not retrieve order {order_id}. "
-            "Please verify the order ID is correct."
+            f"Details: {exc}"
         )
 
     # Run full safety checks if the modification increases risk on a BUY.
@@ -302,10 +302,10 @@ async def modify_order(
             limit_price=limit_price,
             stop_price=stop_price,
         )
-    except Exception:
+    except Exception as exc:
         return (
             f"Error: Failed to modify order {order_id}. "
-            "The order may no longer be modifiable."
+            f"Details: {exc}"
         )
 
     changes: dict[str, Any] = {}
@@ -369,19 +369,19 @@ async def cancel_order(order_id: int) -> str:
         detail: dict[str, Any] = await _client.get_order_detail(
             order_id=order_id,
         )
-    except Exception:
+    except Exception as exc:
         return (
             f"Error: Could not retrieve order {order_id}. "
-            "Please verify the order ID is correct."
+            f"Details: {exc}"
         )
 
     # Cancel the order.
     try:
         await _client.cancel_order(order_id=order_id)
-    except Exception:
+    except Exception as exc:
         return (
             f"Error: Failed to cancel order {order_id}. "
-            "The order may already be cancelled or filled."
+            f"Details: {exc}"
         )
 
     symbol = detail.get("symbol", "N/A")
@@ -419,8 +419,8 @@ async def cancel_all_orders() -> str:
 
     try:
         results: list[dict[str, Any]] = await _client.cancel_all_orders()
-    except Exception:
-        return "Error: Failed to cancel orders. Please try again."
+    except Exception as exc:
+        return f"Error: Failed to cancel orders. Details: {exc}"
 
     if not results:
         return "No open orders to cancel."
