@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 _QUOTE_CACHE_TTL: float = 30.0
 
 # Time-in-force value used for all orders.
-_TIME_IN_FORCE: str = "GTC"
+_TIME_IN_FORCE: str = "DAY"
 
 # Bar-period lookup from user-facing strings to SDK enums.
 _BAR_PERIOD_MAP: dict[str, BarPeriod] = {
