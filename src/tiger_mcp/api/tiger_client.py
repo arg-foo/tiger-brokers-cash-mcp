@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 # How long (seconds) quote data is considered fresh.
 _QUOTE_CACHE_TTL: float = 30.0
 
+# Time-in-force value used for all orders.
+_TIME_IN_FORCE: str = "GTC"
+
 # Bar-period lookup from user-facing strings to SDK enums.
 _BAR_PERIOD_MAP: dict[str, BarPeriod] = {
     "1min": BarPeriod.ONE_MINUTE,
@@ -126,6 +129,7 @@ class TigerClient:
                 action=action,
                 quantity=quantity,
                 limit_price=limit_price,
+                time_in_force=_TIME_IN_FORCE,
             )
         if order_type == "stop_limit":
             return stop_limit_order(
@@ -135,6 +139,7 @@ class TigerClient:
                 quantity=quantity,
                 limit_price=limit_price,
                 aux_price=stop_price,
+                time_in_force=_TIME_IN_FORCE,
             )
 
         msg = f"Unsupported order type: {order_type!r}"
@@ -362,6 +367,7 @@ class TigerClient:
                     self._trade_client.get_order, id=order_id
                 ),
             )
+            order.time_in_force = _TIME_IN_FORCE
 
             kwargs: dict[str, Any] = {}
             if quantity is not None:

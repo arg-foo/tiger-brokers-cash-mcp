@@ -385,6 +385,34 @@ class TestOrderMethods:
         mock_trade_client.modify_order.assert_called_once()
         assert isinstance(result, dict)
 
+    async def test_modify_order_preserves_gtc_time_in_force(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """modify_order() must set time_in_force='GTC' on the fetched order.
+
+        Without this, the SDK may silently revert a GTC order back to DAY
+        when the modification is applied.
+        """
+        mock_order = MagicMock()
+        mock_order.time_in_force = "DAY"  # Simulate SDK default
+        mock_trade_client.get_order.return_value = mock_order
+        mock_trade_client.modify_order.return_value = 12345
+
+        await tiger_client.modify_order(
+            order_id=12345,
+            quantity=20,
+            limit_price=155.0,
+        )
+
+        # The order passed to modify_order must have time_in_force set to GTC
+        passed_order = mock_trade_client.modify_order.call_args[0][0]
+        assert passed_order.time_in_force == "GTC", (
+            "modify_order must explicitly set time_in_force='GTC' "
+            "to prevent silent reversion to DAY"
+        )
+
     async def test_cancel_order_calls_sdk(
         self,
         tiger_client: Any,
@@ -647,6 +675,10 @@ class TestBuildOrder:
                 limit_price=150.0,
             )
             mock_limit_order.assert_called_once()
+            call_kwargs = mock_limit_order.call_args.kwargs
+            assert call_kwargs["time_in_force"] == "GTC", (
+                "limit_order must be called with time_in_force='GTC'"
+            )
 
     def test_build_stop_limit_order(self, tiger_client: Any) -> None:
         """_build_order with stop_limit type should use stop_limit_order."""
@@ -663,6 +695,10 @@ class TestBuildOrder:
                 stop_price=140.0,
             )
             mock_sl_order.assert_called_once()
+            call_kwargs = mock_sl_order.call_args.kwargs
+            assert call_kwargs["time_in_force"] == "GTC", (
+                "stop_limit_order must be called with time_in_force='GTC'"
+            )
 
     def test_build_unknown_order_type_raises(
         self, tiger_client: Any
