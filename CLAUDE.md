@@ -67,12 +67,13 @@
   </plan>
   <implementing>
     <steps>
-      <1>Use tdd-engineer sub agent for implementing features, writing tests, debugging, or reviewing code</1>
-      <2>Use code-reviewer sub agent to review the implementation and output review feedbacks</2>
-      <3>Use tdd-engineer sub agent to implement the review feedback</3>
-      <4>Repeat step 2 and 3 until there are no more review feedbacks</4>
-      <5>Git commit existing changes</5>
-      <6>Git push and submit push request</6>
+      <1>Git branch from main to a feature branch to implement the corresponding feature</1>
+      <2>Use tdd-engineer sub agent for implementing features, writing tests, debugging, or reviewing code</2>
+      <3>Use code-reviewer sub agent to review the implementation and output review feedbacks</3>
+      <4>Use tdd-microservices-engineer sub agent to implement the review feedback</4>
+      <5>Repeat step 3 and 4 until there are no more review feedbacks</5>
+      <6>Git commit existing changes</6>
+      <7>Git push and submit push request</>
     </steps>
   </implementing>
   <technical-design>
