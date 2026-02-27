@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tiger-events-order",
+  "title": "Tiger Brokers Order Status Event",
+  "description": "Schema for order status change events published to Redis streams.",
+  "type": "object",
+  "properties": {
+    "account": {
+      "type": "string",
+      "description": "Tiger Brokers account identifier."
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "Event timestamp from Tiger Brokers (epoch milliseconds as string)."
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the event was received by the subscriber."
+    },
+    "payload": {
+      "type": "string",
+      "description": "JSON-encoded order status payload.",
+      "contentMediaType": "application/json",
+      "contentSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Tiger Brokers internal order ID."
+          },
+          "account": {
+            "type": "string",
+            "description": "Account identifier."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Ticker symbol (e.g. AAPL)."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["BUY", "SELL"],
+            "description": "Order action."
+          },
+          "status": {
+            "type": "string",
+            "description": "Order status (e.g. NEW, FILLED, CANCELLED)."
+          },
+          "order_type": {
+            "type": "string",
+            "description": "Order type (e.g. LMT, STP_LMT)."
+          },
+          "total_quantity": {
+            "type": "number",
+            "description": "Total order quantity."
+          },
+          "filled_quantity": {
+            "type": "number",
+            "description": "Number of shares filled."
+          },
+          "avg_fill_price": {
+            "type": "number",
+            "description": "Average fill price."
+          },
+          "limit_price": {
+            "type": "number",
+            "description": "Limit price if applicable."
+          },
+          "stop_price": {
+            "type": "number",
+            "description": "Stop price if applicable."
+          },
+          "timestamp": {
+            "type": "integer",
+            "description": "Order timestamp (epoch milliseconds)."
+          }
+        }
+      }
+    }
+  },
+  "required": ["account", "received_at", "payload"]
+}

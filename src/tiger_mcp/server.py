@@ -114,7 +114,9 @@ async def main() -> None:
     2. Configure structured logging to stderr.
     3. Create TigerClient and DailyState instances.
     4. Inject dependencies into all tool modules via their init() functions.
-    5. Run the MCP server over the configured transport (stdio or streamable-http).
+    5. Optionally start the event subscription subsystem (PushClient → Redis).
+    6. Run the MCP server over the configured transport (stdio or streamable-http).
+    7. Clean up the event subsystem on shutdown.
     """
     settings = Settings.from_env()
     configure_logging()
@@ -141,9 +143,43 @@ async def main() -> None:
         tool_count=len(mcp._tool_manager.list_tools()),
     )
 
-    if settings.mcp_transport == "streamable-http":
-        mcp.settings.host = settings.mcp_host
-        mcp.settings.port = settings.mcp_port
-        await mcp.run_streamable_http_async()
-    else:
-        await mcp.run_stdio_async()
+    # Optionally start event subscription (Tiger PushClient → Redis Streams)
+    push_subscriber = None
+    if settings.events_enabled:
+        from tiger_mcp.events.publisher import RedisStreamPublisher
+        from tiger_mcp.events.subscriber import PushSubscriber
+
+        publisher = RedisStreamPublisher(
+            redis_url=settings.redis_url,
+            stream_prefix=settings.redis_stream_prefix,
+            maxlen=settings.redis_stream_maxlen,
+        )
+        try:
+            publisher.connect()
+        except Exception as exc:
+            logger.critical(
+                "redis_connect_failed_at_startup",
+                error=str(exc),
+            )
+            raise
+        push_subscriber = PushSubscriber(
+            settings=settings, publisher=publisher,
+        )
+        try:
+            push_subscriber.start()
+        except Exception:
+            publisher.close()
+            raise
+        logger.info("tiger_events_started")
+
+    try:
+        if settings.mcp_transport == "streamable-http":
+            mcp.settings.host = settings.mcp_host
+            mcp.settings.port = settings.mcp_port
+            await mcp.run_streamable_http_async()
+        else:
+            await mcp.run_stdio_async()
+    finally:
+        if push_subscriber is not None:
+            push_subscriber.stop()
+            logger.info("tiger_events_stopped")

@@ -59,8 +59,9 @@ def tiger_client(
     """Create a TigerClient with mocked SDK clients."""
     with (
         patch(
-            "tiger_mcp.api.tiger_client.TigerOpenClientConfig"
-        ) as mock_config_cls,
+            "tiger_mcp.api.tiger_client.build_client_config",
+            return_value=MagicMock(),
+        ),
         patch(
             "tiger_mcp.api.tiger_client.TradeClient",
             return_value=mock_trade_client,
@@ -70,7 +71,6 @@ def tiger_client(
             return_value=mock_quote_client,
         ),
     ):
-        mock_config_cls.return_value = MagicMock()
         from tiger_mcp.api.tiger_client import TigerClient
 
         client = TigerClient(settings)
@@ -94,16 +94,15 @@ class TestTigerClientConstruction:
     ) -> None:
         """TigerClient should create both TradeClient and QuoteClient.
 
-        ``sandbox_debug`` must always be ``False``. Paper (simulation) accounts
-        use the same production API endpoint as live accounts -- the account type
-        is determined by the account ID, not by any SDK flag.
-        ``sandbox_debug=True`` routes requests to a deprecated Tiger test
-        endpoint that is no longer maintained.
+        Configuration is delegated to ``build_client_config()`` which
+        ensures ``sandbox_debug=False``.
         """
+        mock_cfg = MagicMock()
         with (
             patch(
-                "tiger_mcp.api.tiger_client.TigerOpenClientConfig"
-            ) as mock_config_cls,
+                "tiger_mcp.api.tiger_client.build_client_config",
+                return_value=mock_cfg,
+            ) as mock_build,
             patch(
                 "tiger_mcp.api.tiger_client.TradeClient"
             ) as mock_trade_cls,
@@ -111,63 +110,112 @@ class TestTigerClientConstruction:
                 "tiger_mcp.api.tiger_client.QuoteClient"
             ) as mock_quote_cls,
         ):
-            mock_cfg = MagicMock()
-            mock_config_cls.return_value = mock_cfg
-
             from tiger_mcp.api.tiger_client import TigerClient
 
             TigerClient(settings)
 
-            # Config setup
-            mock_config_cls.assert_called_once_with(sandbox_debug=False)
-            assert mock_cfg.tiger_id == "test-id"
-            assert mock_cfg.account == "test-account"
+            # build_client_config called with settings
+            mock_build.assert_called_once_with(settings)
 
-            # Both clients created
+            # Both clients created with the returned config
             mock_trade_cls.assert_called_once_with(mock_cfg)
             mock_quote_cls.assert_called_once_with(mock_cfg)
 
-    def test_constructor_reads_private_key(
+    def test_constructor_delegates_to_build_client_config(
         self, settings: Settings
     ) -> None:
-        """Constructor should read the private key file content."""
+        """Constructor should delegate all config setup to build_client_config."""
+        mock_cfg = MagicMock()
         with (
             patch(
-                "tiger_mcp.api.tiger_client.TigerOpenClientConfig"
-            ) as mock_config_cls,
+                "tiger_mcp.api.tiger_client.build_client_config",
+                return_value=mock_cfg,
+            ) as mock_build,
             patch("tiger_mcp.api.tiger_client.TradeClient"),
             patch("tiger_mcp.api.tiger_client.QuoteClient"),
+        ):
+            from tiger_mcp.api.tiger_client import TigerClient
+
+            TigerClient(settings)
+
+            mock_build.assert_called_once_with(settings)
+
+
+# ---------------------------------------------------------------------------
+# build_client_config factory
+# ---------------------------------------------------------------------------
+
+
+class TestBuildClientConfig:
+    """Test the shared build_client_config factory."""
+
+    def test_sandbox_debug_false(self, settings: Settings) -> None:
+        """build_client_config must always set sandbox_debug=False."""
+        with (
+            patch(
+                "tiger_mcp.api.config_factory.TigerOpenClientConfig"
+            ) as mock_config_cls,
         ):
             mock_cfg = MagicMock()
             mock_config_cls.return_value = mock_cfg
 
-            from tiger_mcp.api.tiger_client import TigerClient
+            from tiger_mcp.api.config_factory import build_client_config
 
-            TigerClient(settings)
+            build_client_config(settings)
+
+            mock_config_cls.assert_called_once_with(sandbox_debug=False)
+
+    def test_reads_private_key(self, settings: Settings) -> None:
+        """build_client_config should read the private key file content."""
+        with (
+            patch(
+                "tiger_mcp.api.config_factory.TigerOpenClientConfig"
+            ) as mock_config_cls,
+        ):
+            mock_cfg = MagicMock()
+            mock_config_cls.return_value = mock_cfg
+
+            from tiger_mcp.api.config_factory import build_client_config
+
+            build_client_config(settings)
 
             assert mock_cfg.private_key == "fake-key-content"
 
-    def test_constructor_sets_language_en_us(
-        self, settings: Settings
-    ) -> None:
-        """Constructor should set the language to English US."""
+    def test_sets_language_en_us(self, settings: Settings) -> None:
+        """build_client_config should set the language to English US."""
         with (
             patch(
-                "tiger_mcp.api.tiger_client.TigerOpenClientConfig"
+                "tiger_mcp.api.config_factory.TigerOpenClientConfig"
             ) as mock_config_cls,
-            patch("tiger_mcp.api.tiger_client.TradeClient"),
-            patch("tiger_mcp.api.tiger_client.QuoteClient"),
         ):
             mock_cfg = MagicMock()
             mock_config_cls.return_value = mock_cfg
 
             from tigeropen.common.consts import Language
 
-            from tiger_mcp.api.tiger_client import TigerClient
+            from tiger_mcp.api.config_factory import build_client_config
 
-            TigerClient(settings)
+            build_client_config(settings)
 
             assert mock_cfg.language == Language.en_US
+
+    def test_sets_tiger_id_and_account(self, settings: Settings) -> None:
+        """build_client_config should set tiger_id and account."""
+        with (
+            patch(
+                "tiger_mcp.api.config_factory.TigerOpenClientConfig"
+            ) as mock_config_cls,
+        ):
+            mock_cfg = MagicMock()
+            mock_config_cls.return_value = mock_cfg
+
+            from tiger_mcp.api.config_factory import build_client_config
+
+            build_client_config(settings)
+
+            assert mock_cfg.tiger_id == "test-id"
+            assert mock_cfg.account == "test-account"
+            assert mock_cfg.license == "TBSG"
 
 
 # ---------------------------------------------------------------------------

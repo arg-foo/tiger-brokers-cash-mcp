@@ -322,7 +322,189 @@ class TestSettingsFromEnv:
     def test_stale_tiger_sandbox_env_var_is_ignored(
         self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A leftover TIGER_SANDBOX env var from older deployments must not break config loading."""
+        """A leftover TIGER_SANDBOX env var must not break config loading."""
         monkeypatch.setenv("TIGER_SANDBOX", "true")
         settings = Settings.from_env()
         assert not hasattr(settings, "sandbox")
+
+    # -----------------------------------------------------------------------
+    # Event subscription settings from env
+    # -----------------------------------------------------------------------
+
+    def test_events_disabled_by_default(
+        self, valid_env: dict[str, str]
+    ) -> None:
+        settings = Settings.from_env()
+        assert settings.events_enabled is False
+        assert settings.redis_url == ""
+        assert settings.redis_stream_prefix == "tiger:events"
+        assert settings.redis_stream_maxlen == 10_000
+        assert settings.push_reconnect_max_attempts == 200
+        assert settings.push_reconnect_base_delay == 1.0
+
+    def test_events_enabled_from_env(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TIGER_EVENTS_ENABLED", "true")
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+        settings = Settings.from_env()
+        assert settings.events_enabled is True
+        assert settings.redis_url == "redis://localhost:6379/0"
+
+    def test_events_enabled_accepts_1_and_yes(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for val in ("1", "yes", "YES", "True", "TRUE"):
+            monkeypatch.setenv("TIGER_EVENTS_ENABLED", val)
+            monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+            settings = Settings.from_env()
+            assert settings.events_enabled is True, f"Expected True for {val!r}"
+
+    def test_events_custom_stream_settings(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TIGER_EVENTS_ENABLED", "true")
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/1")
+        monkeypatch.setenv("REDIS_STREAM_PREFIX", "custom:prefix")
+        monkeypatch.setenv("REDIS_STREAM_MAXLEN", "5000")
+        monkeypatch.setenv("TIGER_PUSH_RECONNECT_MAX_ATTEMPTS", "50")
+        monkeypatch.setenv("TIGER_PUSH_RECONNECT_BASE_DELAY", "2.5")
+        settings = Settings.from_env()
+        assert settings.redis_stream_prefix == "custom:prefix"
+        assert settings.redis_stream_maxlen == 5000
+        assert settings.push_reconnect_max_attempts == 50
+        assert settings.push_reconnect_base_delay == 2.5
+
+    def test_invalid_redis_stream_maxlen_raises(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REDIS_STREAM_MAXLEN", "abc")
+        with pytest.raises(ValueError, match="REDIS_STREAM_MAXLEN"):
+            Settings.from_env()
+
+    def test_invalid_reconnect_max_attempts_raises(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TIGER_PUSH_RECONNECT_MAX_ATTEMPTS", "xyz")
+        with pytest.raises(ValueError, match="TIGER_PUSH_RECONNECT_MAX_ATTEMPTS"):
+            Settings.from_env()
+
+    def test_invalid_reconnect_base_delay_raises(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TIGER_PUSH_RECONNECT_BASE_DELAY", "not-a-float")
+        with pytest.raises(ValueError, match="TIGER_PUSH_RECONNECT_BASE_DELAY"):
+            Settings.from_env()
+
+
+# ---------------------------------------------------------------------------
+# Validation: event subscription fields (direct construction)
+# ---------------------------------------------------------------------------
+
+
+class TestEventsValidation:
+    """Test __post_init__ validation for event subscription fields."""
+
+    def test_events_enabled_without_redis_url_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="redis_url.*required"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                events_enabled=True,
+                redis_url="",
+            )
+
+    def test_events_enabled_with_redis_url_ok(
+        self, tmp_key_file: Path
+    ) -> None:
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+            events_enabled=True,
+            redis_url="redis://localhost:6379/0",
+        )
+        assert settings.events_enabled is True
+
+    def test_events_disabled_without_redis_url_ok(
+        self, tmp_key_file: Path
+    ) -> None:
+        """When events are disabled, redis_url is not required."""
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+            events_enabled=False,
+            redis_url="",
+        )
+        assert settings.events_enabled is False
+
+    def test_negative_reconnect_max_attempts_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="push_reconnect_max_attempts"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                push_reconnect_max_attempts=-1,
+            )
+
+    def test_zero_reconnect_base_delay_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="push_reconnect_base_delay"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                push_reconnect_base_delay=0.0,
+            )
+
+    def test_negative_reconnect_base_delay_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="push_reconnect_base_delay"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                push_reconnect_base_delay=-1.0,
+            )
+
+    def test_zero_stream_maxlen_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="redis_stream_maxlen"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                redis_stream_maxlen=0,
+            )
+
+    def test_negative_stream_maxlen_raises(
+        self, tmp_key_file: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="redis_stream_maxlen"):
+            Settings(
+                tiger_id="id",
+                tiger_account="acct",
+                private_key_path=tmp_key_file,
+                redis_stream_maxlen=-100,
+            )
+
+    def test_zero_reconnect_max_attempts_accepted(
+        self, tmp_key_file: Path
+    ) -> None:
+        """max_attempts=0 means 'do not reconnect' — valid config."""
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+            push_reconnect_max_attempts=0,
+        )
+        assert settings.push_reconnect_max_attempts == 0

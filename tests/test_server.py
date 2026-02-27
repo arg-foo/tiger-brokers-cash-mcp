@@ -276,12 +276,104 @@ class TestTransportSelection:
             mock_settings.mcp_transport = "streamable-http"
             mock_settings.mcp_host = "127.0.0.1"
             mock_settings.mcp_port = 9090
+            mock_settings.events_enabled = False
 
             await main()
 
             mock_run_http.assert_called_once()
             assert mcp.settings.host == "127.0.0.1"
             assert mcp.settings.port == 9090
+
+    async def test_redis_connect_failure_crashes_with_log(self) -> None:
+        """If publisher.connect() raises, main() should re-raise."""
+        from unittest.mock import MagicMock
+
+        import redis
+
+        from tiger_mcp.server import main
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch(
+                "tiger_mcp.events.publisher.redis.Redis.from_url"
+            ) as mock_from_url,
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "stdio"
+            mock_settings.events_enabled = True
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            mock_settings.redis_stream_prefix = "tiger:events"
+            mock_settings.redis_stream_maxlen = 1000
+
+            mock_redis = MagicMock()
+            mock_redis.ping.side_effect = redis.ConnectionError("refused")
+            mock_from_url.return_value = mock_redis
+
+            with pytest.raises(redis.ConnectionError):
+                await main()
+
+    async def test_push_start_failure_closes_publisher(self) -> None:
+        """If push_subscriber.start() raises, publisher should be closed."""
+        from unittest.mock import MagicMock
+
+        from tiger_mcp.server import main
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch(
+                "tiger_mcp.events.publisher.RedisStreamPublisher"
+            ) as mock_pub_cls,
+            patch(
+                "tiger_mcp.events.subscriber.PushSubscriber"
+            ) as mock_sub_cls,
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "stdio"
+            mock_settings.events_enabled = True
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            mock_settings.redis_stream_prefix = "tiger:events"
+            mock_settings.redis_stream_maxlen = 1000
+
+            mock_publisher = MagicMock()
+            mock_pub_cls.return_value = mock_publisher
+
+            mock_sub = MagicMock()
+            mock_sub.start.side_effect = ConnectionError("tiger unreachable")
+            mock_sub_cls.return_value = mock_sub
+
+            with pytest.raises(ConnectionError):
+                await main()
+
+            # Publisher should have been closed on start() failure
+            mock_publisher.close.assert_called_once()
 
     async def test_stdio_transport_calls_run_stdio(self) -> None:
         """When mcp_transport is stdio, main() should call run_stdio_async."""
@@ -311,6 +403,7 @@ class TestTransportSelection:
             mock_settings.tiger_id = "test-id"
             mock_settings.state_dir = "/tmp/state"
             mock_settings.mcp_transport = "stdio"
+            mock_settings.events_enabled = False
 
             await main()
 
