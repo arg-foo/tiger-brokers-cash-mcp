@@ -27,7 +27,7 @@ Implement 4 MCP tools in `src/tiger_mcp/tools/account/` for account information 
 
 - **`get_transaction_history`** (params: `symbol?`, `start_date?`, `end_date?`, `limit?`):
   - Returns: execution history (fills)
-  - Calls `TigerClient.get_order_transactions()`
+  - Calls `TigerClient.get_filled_orders()`
   - Optional filters for symbol, date range, count limit
   - Default limit: 50
 

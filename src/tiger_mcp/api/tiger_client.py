@@ -246,7 +246,7 @@ class TigerClient:
             msg = f"get_positions failed: {exc}"
             raise RuntimeError(msg) from exc
 
-    async def get_order_transactions(
+    async def get_filled_orders(
         self,
         symbol: str | None = None,
         start_date: str | None = None,
@@ -285,7 +285,7 @@ class TigerClient:
             result = [self._order_to_dict(o) for o in orders]
             return result[:limit]
         except Exception as exc:
-            msg = f"get_order_transactions failed: {exc}"
+            msg = f"get_filled_orders failed: {exc}"
             raise RuntimeError(msg) from exc
 
     # ------------------------------------------------------------------
@@ -336,11 +336,9 @@ class TigerClient:
             order = self._build_order(
                 symbol, action, quantity, order_type, limit_price, stop_price
             )
-            order_id = await self._run_sync(
-                self._trade_client.place_order, order
-            )
+            await self._run_sync(self._trade_client.place_order, order)
             return {
-                "order_id": order_id,
+                "order_id": order.id,
                 "symbol": symbol,
                 "action": action,
                 "quantity": quantity,

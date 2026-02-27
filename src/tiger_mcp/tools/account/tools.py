@@ -196,7 +196,7 @@ async def get_transaction_history(
         return err
 
     try:
-        transactions: list[dict[str, Any]] = await _client.get_order_transactions(  # type: ignore[union-attr]
+        transactions: list[dict[str, Any]] = await _client.get_filled_orders(  # type: ignore[union-attr]
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,

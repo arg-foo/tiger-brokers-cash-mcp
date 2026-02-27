@@ -185,7 +185,7 @@ class TestAsyncWrapping:
         public_methods = [
             "get_assets",
             "get_positions",
-            "get_order_transactions",
+            "get_filled_orders",
             "preview_order",
             "place_order",
             "modify_order",
@@ -268,29 +268,29 @@ class TestAccountMethods:
 
         assert result == []
 
-    async def test_get_order_transactions_calls_sdk(
+    async def test_get_filled_orders_calls_sdk(
         self,
         tiger_client: Any,
         mock_trade_client: MagicMock,
     ) -> None:
-        """get_order_transactions() should call get_filled_orders()."""
+        """get_filled_orders() should call get_filled_orders()."""
         mock_order = MagicMock()
         mock_trade_client.get_filled_orders.return_value = [mock_order]
 
-        result = await tiger_client.get_order_transactions()
+        result = await tiger_client.get_filled_orders()
 
         mock_trade_client.get_filled_orders.assert_called_once()
         assert isinstance(result, list)
 
-    async def test_get_order_transactions_with_params(
+    async def test_get_filled_orders_with_params(
         self,
         tiger_client: Any,
         mock_trade_client: MagicMock,
     ) -> None:
-        """get_order_transactions() should pass filter parameters."""
+        """get_filled_orders() should pass filter parameters."""
         mock_trade_client.get_filled_orders.return_value = []
 
-        await tiger_client.get_order_transactions(
+        await tiger_client.get_filled_orders(
             symbol="AAPL",
             start_date="2024-01-01",
             end_date="2024-12-31",
@@ -334,7 +334,11 @@ class TestOrderMethods:
         mock_trade_client: MagicMock,
     ) -> None:
         """place_order() with limit order type should pass limit_price."""
-        mock_trade_client.place_order.return_value = 12346
+
+        def _set_order_id(order: Any) -> None:
+            order.id = 12346
+
+        mock_trade_client.place_order.side_effect = _set_order_id
 
         result = await tiger_client.place_order(
             symbol="AAPL",
@@ -353,7 +357,11 @@ class TestOrderMethods:
         mock_trade_client: MagicMock,
     ) -> None:
         """place_order() with stop_limit order type."""
-        mock_trade_client.place_order.return_value = 12348
+
+        def _set_order_id(order: Any) -> None:
+            order.id = 12348
+
+        mock_trade_client.place_order.side_effect = _set_order_id
 
         result = await tiger_client.place_order(
             symbol="AAPL",

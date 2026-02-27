@@ -328,7 +328,7 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Tool should return formatted execution history."""
-        mock_client.get_order_transactions.return_value = [
+        mock_client.get_filled_orders.return_value = [
             {
                 "symbol": "AAPL",
                 "action": "BUY",
@@ -352,7 +352,7 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """When no transactions found, tool should return descriptive message."""
-        mock_client.get_order_transactions.return_value = []
+        mock_client.get_filled_orders.return_value = []
 
         from tiger_mcp.tools.account.tools import get_transaction_history
 
@@ -364,13 +364,13 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Tool should pass symbol filter to TigerClient."""
-        mock_client.get_order_transactions.return_value = []
+        mock_client.get_filled_orders.return_value = []
 
         from tiger_mcp.tools.account.tools import get_transaction_history
 
         await get_transaction_history(symbol="AAPL")
 
-        mock_client.get_order_transactions.assert_called_once_with(
+        mock_client.get_filled_orders.assert_called_once_with(
             symbol="AAPL",
             start_date=None,
             end_date=None,
@@ -381,7 +381,7 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Tool should pass date range filters to TigerClient."""
-        mock_client.get_order_transactions.return_value = []
+        mock_client.get_filled_orders.return_value = []
 
         from tiger_mcp.tools.account.tools import get_transaction_history
 
@@ -390,7 +390,7 @@ class TestGetTransactionHistory:
             end_date="2026-01-31",
         )
 
-        mock_client.get_order_transactions.assert_called_once_with(
+        mock_client.get_filled_orders.assert_called_once_with(
             symbol=None,
             start_date="2026-01-01",
             end_date="2026-01-31",
@@ -401,13 +401,13 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Tool should pass limit parameter to TigerClient."""
-        mock_client.get_order_transactions.return_value = []
+        mock_client.get_filled_orders.return_value = []
 
         from tiger_mcp.tools.account.tools import get_transaction_history
 
         await get_transaction_history(limit=10)
 
-        mock_client.get_order_transactions.assert_called_once_with(
+        mock_client.get_filled_orders.assert_called_once_with(
             symbol=None,
             start_date=None,
             end_date=None,
@@ -418,7 +418,7 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Tool should pass all filters together to TigerClient."""
-        mock_client.get_order_transactions.return_value = []
+        mock_client.get_filled_orders.return_value = []
 
         from tiger_mcp.tools.account.tools import get_transaction_history
 
@@ -429,7 +429,7 @@ class TestGetTransactionHistory:
             limit=25,
         )
 
-        mock_client.get_order_transactions.assert_called_once_with(
+        mock_client.get_filled_orders.assert_called_once_with(
             symbol="TSLA",
             start_date="2026-02-01",
             end_date="2026-02-15",
@@ -440,8 +440,8 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """When the API raises an error, tool should return a descriptive message."""
-        mock_client.get_order_transactions.side_effect = RuntimeError(
-            "get_order_transactions failed: server error"
+        mock_client.get_filled_orders.side_effect = RuntimeError(
+            "get_filled_orders failed: server error"
         )
 
         from tiger_mcp.tools.account.tools import get_transaction_history
@@ -455,7 +455,7 @@ class TestGetTransactionHistory:
         self, mock_client: AsyncMock
     ) -> None:
         """Multiple transactions should each be formatted and separated."""
-        mock_client.get_order_transactions.return_value = [
+        mock_client.get_filled_orders.return_value = [
             {
                 "symbol": "AAPL",
                 "action": "BUY",

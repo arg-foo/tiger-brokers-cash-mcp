@@ -13,7 +13,7 @@ Implement `src/tiger_mcp/api/tiger_client.py` wrapping the `tigeropen` SDK's `Tr
 - `TigerClient` class wraps both `TradeClient` and `QuoteClient` from `tigeropen`
 - Constructor accepts config and initializes both clients with RSA key auth
 - Async methods for all operations needed by tools:
-  - **Account**: `get_assets()`, `get_positions()`, `get_order_transactions()`
+  - **Account**: `get_assets()`, `get_positions()`, `get_filled_orders()`
   - **Orders**: `preview_order()`, `place_order()`, `modify_order()`, `cancel_order()`, `cancel_all_orders()`, `get_open_orders()`, `get_order_detail()`
   - **Quotes**: `get_quote()`, `get_quotes()`, `get_bars()`
 - All SDK calls wrapped with `asyncio.get_event_loop().run_in_executor(None, ...)`
