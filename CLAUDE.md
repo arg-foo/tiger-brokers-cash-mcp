@@ -1,3 +1,8 @@
+<tiger-brokers-api-doc-url>
+  https://docs-en.itigerup.com/docs/intro
+</tiger-brokers-api-doc-url>
+
+
 <always>
   <plan>
     **Claude Code Prompt for Plan Mode**
