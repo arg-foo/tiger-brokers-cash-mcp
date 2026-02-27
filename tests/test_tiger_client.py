@@ -235,7 +235,7 @@ class TestAccountMethods:
     ) -> None:
         """get_positions() should call TradeClient.get_positions()."""
         mock_pos = MagicMock()
-        mock_pos.symbol = "AAPL"
+        mock_pos.contract.symbol = "AAPL"
         mock_pos.quantity = 10
         mock_trade_client.get_positions.return_value = [mock_pos]
 
@@ -243,6 +243,9 @@ class TestAccountMethods:
 
         mock_trade_client.get_positions.assert_called_once()
         assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["symbol"] == "AAPL"
+        assert result[0]["quantity"] == 10
 
     async def test_get_positions_empty(
         self,
@@ -267,6 +270,60 @@ class TestAccountMethods:
         result = await tiger_client.get_positions()
 
         assert result == []
+
+    async def test_position_with_no_contract_omits_symbol(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """Position with contract=None should produce a dict without 'symbol'.
+
+        Covers the ``if contract is not None`` guard in ``_position_to_dict``.
+        """
+        mock_pos = MagicMock()
+        mock_pos.contract = None
+        mock_pos.quantity = 5
+        mock_pos.average_cost = 100.0
+        # Ensure the remaining numeric attrs are absent so we control the dict
+        mock_pos.market_price = None
+        mock_pos.market_value = None
+        mock_pos.unrealized_pnl = None
+        mock_pos.realized_pnl = None
+        mock_trade_client.get_positions.return_value = [mock_pos]
+
+        result = await tiger_client.get_positions()
+
+        assert len(result) == 1
+        assert "symbol" not in result[0]
+        assert result[0]["quantity"] == 5
+        assert result[0]["average_cost"] == 100.0
+
+    async def test_position_with_contract_symbol_none_omits_symbol(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """Position where contract.symbol is None should omit 'symbol'.
+
+        Covers the inner ``if symbol is not None`` guard in
+        ``_position_to_dict``.
+        """
+        mock_pos = MagicMock()
+        mock_pos.contract.symbol = None
+        mock_pos.quantity = 3
+        mock_pos.average_cost = None
+        mock_pos.market_price = 200.0
+        mock_pos.market_value = None
+        mock_pos.unrealized_pnl = None
+        mock_pos.realized_pnl = None
+        mock_trade_client.get_positions.return_value = [mock_pos]
+
+        result = await tiger_client.get_positions()
+
+        assert len(result) == 1
+        assert "symbol" not in result[0]
+        assert result[0]["quantity"] == 3
+        assert result[0]["market_price"] == 200.0
 
     async def test_get_filled_orders_calls_sdk(
         self,

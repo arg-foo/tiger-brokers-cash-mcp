@@ -193,8 +193,13 @@ class TigerClient:
     def _position_to_dict(pos: Any) -> dict[str, Any]:
         """Convert a tigeropen Position object to a plain dict."""
         result: dict[str, Any] = {}
+        # symbol lives on pos.contract, not pos directly
+        contract = getattr(pos, "contract", None)
+        if contract is not None:
+            symbol = getattr(contract, "symbol", None)
+            if symbol is not None:
+                result["symbol"] = symbol
         for attr in (
-            "symbol",
             "quantity",
             "average_cost",
             "market_price",
