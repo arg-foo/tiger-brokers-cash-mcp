@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,7 +17,7 @@ from tigeropen.push.push_client import PushClient
 from tiger_mcp.api.config_factory import build_client_config
 from tiger_mcp.config import Settings
 from tiger_mcp.events.publisher import RedisStreamPublisher
-from tiger_mcp.events.serializers import serialize_order_status
+from tiger_mcp.events.serializers import serialize_order_status, serialize_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class PushSubscriber:
             sign_type=None,
         )
         self._push_client.order_changed = self._on_order_changed
+        self._push_client.transaction_changed = self._on_transaction_changed
         self._push_client.connect_callback = self._on_connected
         self._push_client.disconnect_callback = self._on_disconnected
         self._push_client.error_callback = self._on_error
@@ -85,22 +87,55 @@ class PushSubscriber:
     # PushClient callbacks (called from SDK thread pool)
     # ------------------------------------------------------------------
 
-    def _on_order_changed(self, frame: Any) -> None:
-        """Handle order status change events from PushClient."""
+    def _handle_event(
+        self,
+        frame: Any,
+        serializer: Callable[[Any], dict[str, Any]],
+        event_type: str,
+        error_key: str,
+    ) -> None:
+        """Serialize a PushClient frame and publish to Redis streams.
+
+        Parameters
+        ----------
+        frame:
+            Raw frame object from the PushClient callback.
+        serializer:
+            Function that converts the frame into a JSON-serializable dict.
+        event_type:
+            Event type string passed to the publisher (e.g. "order").
+        error_key:
+            Structured-logging key used when an exception is caught.
+        """
         try:
             received_at = datetime.now(UTC).isoformat()
-            payload = serialize_order_status(frame)
+            payload = serializer(frame)
             account = getattr(frame, "account", self._settings.tiger_account)
             timestamp = str(getattr(frame, "timestamp", ""))
             self._publisher.publish(
-                event_type="order",
+                event_type=event_type,
                 payload=payload,
                 account=account or self._settings.tiger_account,
                 timestamp=timestamp,
                 received_at=received_at,
             )
         except Exception:
-            logger.error("order_event_processing_failed", exc_info=True)
+            logger.error(error_key, exc_info=True)
+
+    def _on_order_changed(self, frame: Any) -> None:
+        """Handle order status change events from PushClient."""
+        self._handle_event(
+            frame, serialize_order_status, "order", "order_event_processing_failed"
+        )
+
+    def _on_transaction_changed(self, frame: Any) -> None:
+        """Handle transaction change events from PushClient."""
+        self._handle_event(
+            frame,
+            serialize_transaction,
+            "transaction",
+            "transaction_event_processing_failed",
+        )
 
     def _on_connected(self, frame: Any) -> None:
         """Handle successful PushClient connection."""
@@ -113,6 +148,13 @@ class PushSubscriber:
             )
             logger.info(
                 "push_subscribed_orders",
+                extra={"account": self._settings.tiger_account},
+            )
+            self._push_client.subscribe_transaction(
+                account=self._settings.tiger_account,
+            )
+            logger.info(
+                "push_subscribed_transactions",
                 extra={"account": self._settings.tiger_account},
             )
 

@@ -61,6 +61,33 @@ _ORDER_STATUS_FIELDS: tuple[str, ...] = (
 )
 
 
+# Fields to extract from OrderTransactionData protobuf.
+# Uses the exact camelCase names from the protobuf definition.
+_TRANSACTION_FIELDS: tuple[str, ...] = (
+    # Identity
+    "id",
+    "orderId",
+    "account",
+    "symbol",
+    "identifier",
+    # Contract details
+    "multiplier",
+    "action",
+    "market",
+    "currency",
+    "segType",
+    "secType",
+    # Fill data
+    "filledPrice",
+    "filledQuantity",
+    # Timestamps
+    "createTime",
+    "updateTime",
+    "transactTime",
+    "timestamp",
+)
+
+
 def serialize_order_status(frame: Any) -> dict[str, Any]:
     """Convert a PushClient OrderStatusData frame to a JSON-serializable dict.
 
@@ -83,6 +110,34 @@ def serialize_order_status(frame: Any) -> dict[str, Any]:
     """
     result: dict[str, Any] = {}
     for attr in _ORDER_STATUS_FIELDS:
+        val = getattr(frame, attr, _MISSING)
+        if val is not _MISSING:
+            result[attr] = val
+    return result
+
+
+def serialize_transaction(frame: Any) -> dict[str, Any]:
+    """Convert a PushClient OrderTransactionData frame to a JSON-serializable dict.
+
+    Uses defensive ``getattr`` pattern to handle potentially missing
+    fields on protobuf objects. Field names match the protobuf
+    definition exactly (camelCase).
+
+    Fields with falsy values (``0``, ``0.0``, ``False``, ``""``) are
+    preserved — only truly missing attributes are omitted.
+
+    Parameters
+    ----------
+    frame:
+        An ``OrderTransactionData`` object from the Tiger PushClient callback.
+
+    Returns
+    -------
+    dict[str, Any]
+        A plain dict with all present fields extracted from the frame.
+    """
+    result: dict[str, Any] = {}
+    for attr in _TRANSACTION_FIELDS:
         val = getattr(frame, attr, _MISSING)
         if val is not _MISSING:
             result[attr] = val

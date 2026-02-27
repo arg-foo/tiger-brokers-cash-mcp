@@ -115,7 +115,7 @@ class TestStart:
         subscriber: PushSubscriber,
         mock_client_config: MagicMock,
     ) -> None:
-        """start() should assign all 4 callback attributes on the PushClient."""
+        """start() should assign all 5 callback attributes on the PushClient."""
         mock_build_config.return_value = mock_client_config
         mock_push_instance = MagicMock()
         mock_push_client_cls.return_value = mock_push_instance
@@ -123,6 +123,10 @@ class TestStart:
         subscriber.start()
 
         assert mock_push_instance.order_changed == subscriber._on_order_changed
+        assert (
+            mock_push_instance.transaction_changed
+            == subscriber._on_transaction_changed
+        )
         assert mock_push_instance.connect_callback == subscriber._on_connected
         assert (
             mock_push_instance.disconnect_callback == subscriber._on_disconnected
@@ -429,6 +433,331 @@ class TestOnOrderChanged:
 
 
 # ---------------------------------------------------------------------------
+# _on_transaction_changed callback
+# ---------------------------------------------------------------------------
+
+
+class TestOnTransactionChanged:
+    """Test the transaction change callback."""
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_serializes_and_publishes(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_on_transaction_changed should serialize the frame and publish to Redis."""
+        mock_datetime.now.return_value.isoformat.return_value = (
+            "2024-01-15T10:30:00+00:00"
+        )
+        mock_serialize.return_value = {"filledPrice": 175.50, "symbol": "AAPL"}
+        frame = MagicMock()
+        frame.account = "DU12345"
+        frame.timestamp = 1700000000
+
+        subscriber._on_transaction_changed(frame)
+
+        mock_serialize.assert_called_once_with(frame)
+        mock_publisher.publish.assert_called_once_with(
+            event_type="transaction",
+            payload={"filledPrice": 175.50, "symbol": "AAPL"},
+            account="DU12345",
+            timestamp="1700000000",
+            received_at="2024-01-15T10:30:00+00:00",
+        )
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_uses_account_from_frame(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """When frame has an account attribute, it should be used."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_serialize.return_value = {"filledPrice": 100.0}
+        frame = MagicMock()
+        frame.account = "DU99999"
+        frame.timestamp = 1700000000
+
+        subscriber._on_transaction_changed(frame)
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU99999"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_falls_back_to_settings_account(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """When frame.account is missing, fall back to settings.tiger_account."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_serialize.return_value = {"filledPrice": 200.0}
+        frame = MagicMock(spec=[])  # spec=[] means no attributes at all
+
+        subscriber._on_transaction_changed(frame)
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU12345"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_falls_back_when_account_is_empty(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """Empty frame.account falls back to settings.tiger_account."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_serialize.return_value = {"filledPrice": 200.0}
+        frame = MagicMock()
+        frame.account = ""
+        frame.timestamp = 1700000000
+
+        subscriber._on_transaction_changed(frame)
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU12345"
+
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_exception_caught(
+        self,
+        mock_serialize: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Exceptions in callback should be caught and logged."""
+        mock_serialize.side_effect = ValueError("bad frame data")
+        frame = MagicMock()
+
+        with caplog.at_level(logging.ERROR, logger="tiger_mcp.events.subscriber"):
+            subscriber._on_transaction_changed(frame)
+
+        # Should not raise
+        mock_publisher.publish.assert_not_called()
+        error_records = [
+            r for r in caplog.records
+            if r.levelno == logging.ERROR
+            and "transaction_event_processing_failed" in r.message
+        ]
+        assert len(error_records) == 1
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_passes_received_at(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """received_at should be set at callback invocation time."""
+        mock_datetime.now.return_value.isoformat.return_value = (
+            "2024-06-01T12:00:00+00:00"
+        )
+        mock_serialize.return_value = {"filledPrice": 175.50}
+        frame = MagicMock()
+        frame.account = "DU12345"
+        frame.timestamp = 1700000000
+
+        subscriber._on_transaction_changed(frame)
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["received_at"] == "2024-06-01T12:00:00+00:00"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    @patch("tiger_mcp.events.subscriber.serialize_transaction")
+    def test_on_transaction_changed_timestamp_fallback(
+        self,
+        mock_serialize: MagicMock,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """When frame.timestamp is missing, an empty string should be passed."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_serialize.return_value = {"filledPrice": 175.50}
+        frame = MagicMock(spec=[])  # No attributes
+
+        subscriber._on_transaction_changed(frame)
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["timestamp"] == ""
+
+
+# ---------------------------------------------------------------------------
+# _handle_event (shared event handling logic)
+# ---------------------------------------------------------------------------
+
+
+class TestHandleEvent:
+    """Test the shared _handle_event method that both callbacks delegate to."""
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_delegates_serializer(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should call the provided serializer with the frame."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={"key": "value"})
+        frame = MagicMock()
+        frame.account = "DU12345"
+        frame.timestamp = 1700000000
+
+        subscriber._handle_event(frame, serializer, "test_event", "test_error_key")
+
+        serializer.assert_called_once_with(frame)
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_publishes_with_correct_event_type(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should pass the event_type to publisher.publish."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={"key": "value"})
+        frame = MagicMock()
+        frame.account = "DU12345"
+        frame.timestamp = 1700000000
+
+        subscriber._handle_event(frame, serializer, "custom_type", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["event_type"] == "custom_type"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_uses_frame_account(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should use frame.account when present."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={})
+        frame = MagicMock()
+        frame.account = "DU99999"
+        frame.timestamp = 1700000000
+
+        subscriber._handle_event(frame, serializer, "evt", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU99999"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_falls_back_to_settings_account(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should fall back to settings account when frame lacks one."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={})
+        frame = MagicMock(spec=[])  # No attributes
+
+        subscriber._handle_event(frame, serializer, "evt", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU12345"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_falls_back_when_account_empty(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should fall back when frame.account is empty string."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={})
+        frame = MagicMock()
+        frame.account = ""
+        frame.timestamp = 1700000000
+
+        subscriber._handle_event(frame, serializer, "evt", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["account"] == "DU12345"
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_timestamp_fallback(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should use empty string when frame lacks timestamp."""
+        mock_datetime.now.return_value.isoformat.return_value = "t"
+        serializer = MagicMock(return_value={})
+        frame = MagicMock(spec=[])
+
+        subscriber._handle_event(frame, serializer, "evt", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["timestamp"] == ""
+
+    @patch("tiger_mcp.events.subscriber.datetime")
+    def test_handle_event_sets_received_at(
+        self,
+        mock_datetime: MagicMock,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+    ) -> None:
+        """_handle_event should capture current time as received_at."""
+        mock_datetime.now.return_value.isoformat.return_value = (
+            "2024-06-01T12:00:00+00:00"
+        )
+        serializer = MagicMock(return_value={})
+        frame = MagicMock()
+        frame.account = "DU12345"
+        frame.timestamp = 1700000000
+
+        subscriber._handle_event(frame, serializer, "evt", "err")
+
+        call_kwargs = mock_publisher.publish.call_args[1]
+        assert call_kwargs["received_at"] == "2024-06-01T12:00:00+00:00"
+
+    def test_handle_event_logs_error_with_custom_key(
+        self,
+        subscriber: PushSubscriber,
+        mock_publisher: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """_handle_event should log with the provided error_key on exception."""
+        serializer = MagicMock(side_effect=ValueError("boom"))
+        frame = MagicMock()
+
+        with caplog.at_level(logging.ERROR, logger="tiger_mcp.events.subscriber"):
+            subscriber._handle_event(frame, serializer, "evt", "my_custom_error_key")
+
+        mock_publisher.publish.assert_not_called()
+        error_records = [
+            r for r in caplog.records
+            if r.levelno == logging.ERROR
+            and "my_custom_error_key" in r.message
+        ]
+        assert len(error_records) == 1
+
+
+# ---------------------------------------------------------------------------
 # _on_connected callback
 # ---------------------------------------------------------------------------
 
@@ -460,14 +789,14 @@ class TestOnConnected:
 
     @patch("tiger_mcp.events.subscriber.build_client_config")
     @patch("tiger_mcp.events.subscriber.PushClient")
-    def test_on_connected_subscribes_to_orders(
+    def test_on_connected_subscribes_to_orders_and_transactions(
         self,
         mock_push_client_cls: MagicMock,
         mock_build_config: MagicMock,
         subscriber: PushSubscriber,
         mock_client_config: MagicMock,
     ) -> None:
-        """_on_connected should call subscribe_order with the configured account."""
+        """_on_connected should subscribe to both orders and transactions."""
         mock_build_config.return_value = mock_client_config
         mock_push_instance = MagicMock()
         mock_push_client_cls.return_value = mock_push_instance
@@ -476,6 +805,9 @@ class TestOnConnected:
         subscriber._on_connected(MagicMock())
 
         mock_push_instance.subscribe_order.assert_called_once_with(
+            account="DU12345"
+        )
+        mock_push_instance.subscribe_transaction.assert_called_once_with(
             account="DU12345"
         )
 

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tiger-events-transaction",
+  "title": "Tiger Brokers Transaction Event",
+  "description": "Schema for transaction (execution/fill) events published to Redis streams via XADD. Field names match the OrderTransactionData protobuf definition exactly (camelCase).",
+  "type": "object",
+  "properties": {
+    "account": {
+      "type": "string",
+      "description": "Tiger Brokers account identifier."
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "Event timestamp from Tiger Brokers (epoch milliseconds as string)."
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the event was received by the subscriber."
+    },
+    "payload": {
+      "type": "string",
+      "description": "JSON-encoded transaction payload.",
+      "contentMediaType": "application/json",
+      "contentSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Transaction ID."
+          },
+          "orderId": {
+            "type": "integer",
+            "description": "Associated order ID."
+          },
+          "account": {
+            "type": "string",
+            "description": "Account identifier."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Ticker symbol (e.g. AAPL)."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "Full contract identifier."
+          },
+          "multiplier": {
+            "type": "number",
+            "description": "Contract multiplier."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["BUY", "SELL"],
+            "description": "Trade action."
+          },
+          "market": {
+            "type": "string",
+            "description": "Market code (e.g. US, HK)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency code (e.g. USD)."
+          },
+          "segType": {
+            "type": "string",
+            "description": "Segment type."
+          },
+          "secType": {
+            "type": "string",
+            "enum": ["STK", "OPT", "WAR", "IOPT", "CASH", "FUT", "FOP"],
+            "description": "Security type."
+          },
+          "filledPrice": {
+            "type": "number",
+            "description": "Execution fill price for this transaction."
+          },
+          "filledQuantity": {
+            "type": "integer",
+            "description": "Execution fill quantity for this transaction."
+          },
+          "createTime": {
+            "type": "integer",
+            "description": "Transaction creation time (epoch milliseconds)."
+          },
+          "updateTime": {
+            "type": "integer",
+            "description": "Transaction update time (epoch milliseconds)."
+          },
+          "transactTime": {
+            "type": "integer",
+            "description": "Execution time (epoch milliseconds)."
+          },
+          "timestamp": {
+            "type": "integer",
+            "description": "Last update timestamp (epoch milliseconds)."
+          }
+        }
+      }
+    }
+  },
+  "required": ["account", "received_at", "payload"]
+}

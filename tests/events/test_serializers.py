@@ -14,7 +14,9 @@ import pytest
 
 from tiger_mcp.events.serializers import (
     _ORDER_STATUS_FIELDS,
+    _TRANSACTION_FIELDS,
     serialize_order_status,
+    serialize_transaction,
 )
 
 # ---------------------------------------------------------------------------
@@ -93,6 +95,34 @@ def partial_frame() -> MagicMock:
 def empty_frame() -> MagicMock:
     """Return a mock frame with no recognized attributes."""
     frame = MagicMock(spec=[])
+    return frame
+
+
+@pytest.fixture()
+def full_transaction_frame() -> MagicMock:
+    """Return a mock transaction frame with all 17 recognized fields populated."""
+    frame = MagicMock(spec=list(_TRANSACTION_FIELDS))
+    # Identity
+    frame.id = 98765
+    frame.orderId = 12345
+    frame.account = "DU12345"
+    frame.symbol = "AAPL"
+    frame.identifier = "AAPL"
+    # Contract details
+    frame.multiplier = 1.0
+    frame.action = "BUY"
+    frame.market = "US"
+    frame.currency = "USD"
+    frame.segType = "S"
+    frame.secType = "STK"
+    # Fill data
+    frame.filledPrice = 175.50
+    frame.filledQuantity = 20
+    # Timestamps
+    frame.createTime = 1700000000000
+    frame.updateTime = 1700000050000
+    frame.transactTime = 1700000060000
+    frame.timestamp = 1700000060000
     return frame
 
 
@@ -286,3 +316,191 @@ class TestSerializeOrderStatus:
         assert result["filledQuantity"] == 40
         assert result["avgFillPrice"] == 175.25
         assert result["status"] == "PARTIALLY_FILLED"
+
+
+# ---------------------------------------------------------------------------
+# Transaction serializer tests
+# ---------------------------------------------------------------------------
+
+
+class TestSerializeTransaction:
+    """Tests for the ``serialize_transaction`` function."""
+
+    def test_serialize_all_fields(
+        self, full_transaction_frame: MagicMock
+    ) -> None:
+        """When the frame has all 17 recognized fields, all appear in result."""
+        result = serialize_transaction(full_transaction_frame)
+
+        # Identity
+        assert result["id"] == 98765
+        assert result["orderId"] == 12345
+        assert result["account"] == "DU12345"
+        assert result["symbol"] == "AAPL"
+        assert result["identifier"] == "AAPL"
+        # Contract details
+        assert result["multiplier"] == 1.0
+        assert result["action"] == "BUY"
+        assert result["market"] == "US"
+        assert result["currency"] == "USD"
+        assert result["segType"] == "S"
+        assert result["secType"] == "STK"
+        # Fill data
+        assert result["filledPrice"] == 175.50
+        assert result["filledQuantity"] == 20
+        # Timestamps
+        assert result["createTime"] == 1700000000000
+        assert result["updateTime"] == 1700000050000
+        assert result["transactTime"] == 1700000060000
+        assert result["timestamp"] == 1700000060000
+        # All 17 fields present
+        assert len(result) == 17
+        assert len(result) == len(_TRANSACTION_FIELDS)
+
+    def test_serialize_missing_fields_omitted(self) -> None:
+        """Attributes not present on the frame are silently omitted."""
+        frame = MagicMock(spec=["id", "orderId", "symbol"])
+        frame.id = 1
+        frame.orderId = 2
+        frame.symbol = "GOOG"
+
+        result = serialize_transaction(frame)
+
+        assert "id" in result
+        assert "orderId" in result
+        assert "symbol" in result
+        assert "account" not in result
+        assert "action" not in result
+        assert "filledPrice" not in result
+        assert "filledQuantity" not in result
+        assert "transactTime" not in result
+
+    def test_serialize_none_fields_included(self) -> None:
+        """Attributes explicitly set to None are included in result."""
+        frame = MagicMock(spec=["id", "symbol", "action", "filledPrice"])
+        frame.id = 42
+        frame.symbol = "MSFT"
+        frame.action = None
+        frame.filledPrice = None
+
+        result = serialize_transaction(frame)
+
+        assert result["id"] == 42
+        assert result["symbol"] == "MSFT"
+        assert result["action"] is None
+        assert result["filledPrice"] is None
+
+    def test_serialize_falsy_values_preserved(self) -> None:
+        """Zero, 0.0, False, and empty string are preserved (not dropped)."""
+        frame = MagicMock(
+            spec=[
+                "filledQuantity",
+                "filledPrice",
+                "multiplier",
+                "action",
+                "segType",
+            ]
+        )
+        frame.filledQuantity = 0
+        frame.filledPrice = 0.0
+        frame.multiplier = False
+        frame.action = ""
+        frame.segType = ""
+
+        result = serialize_transaction(frame)
+
+        assert result["filledQuantity"] == 0
+        assert result["filledPrice"] == 0.0
+        assert result["multiplier"] is False
+        assert result["action"] == ""
+        assert result["segType"] == ""
+
+    def test_numeric_fields_preserved(self) -> None:
+        """Integer and float values are preserved with exact types."""
+        frame = MagicMock(
+            spec=[
+                "id",
+                "orderId",
+                "filledPrice",
+                "filledQuantity",
+                "multiplier",
+                "createTime",
+                "updateTime",
+                "transactTime",
+                "timestamp",
+            ]
+        )
+        frame.id = 11111
+        frame.orderId = 22222
+        frame.filledPrice = 99.9999
+        frame.filledQuantity = 250
+        frame.multiplier = 1.0
+        frame.createTime = 1700000000000
+        frame.updateTime = 1700000050000
+        frame.transactTime = 1700000060000
+        frame.timestamp = 1700000060000
+
+        result = serialize_transaction(frame)
+
+        assert isinstance(result["id"], int)
+        assert result["id"] == 11111
+        assert isinstance(result["orderId"], int)
+        assert result["orderId"] == 22222
+        assert isinstance(result["filledPrice"], float)
+        assert result["filledPrice"] == 99.9999
+        assert isinstance(result["filledQuantity"], int)
+        assert result["filledQuantity"] == 250
+        assert isinstance(result["multiplier"], float)
+        assert result["multiplier"] == 1.0
+        assert isinstance(result["createTime"], int)
+        assert result["createTime"] == 1700000000000
+        assert isinstance(result["updateTime"], int)
+        assert result["updateTime"] == 1700000050000
+        assert isinstance(result["transactTime"], int)
+        assert result["transactTime"] == 1700000060000
+        assert isinstance(result["timestamp"], int)
+        assert result["timestamp"] == 1700000060000
+
+    def test_result_is_json_serializable(
+        self, full_transaction_frame: MagicMock
+    ) -> None:
+        """The result dict can be serialized with orjson without error."""
+        result = serialize_transaction(full_transaction_frame)
+
+        serialized = orjson.dumps(result)
+        assert isinstance(serialized, bytes)
+
+        deserialized = orjson.loads(serialized)
+        assert deserialized == result
+
+    def test_partial_fill_scenario(self) -> None:
+        """Per-execution fill data with filledPrice and filledQuantity."""
+        frame = MagicMock(
+            spec=[
+                "id",
+                "orderId",
+                "symbol",
+                "action",
+                "filledPrice",
+                "filledQuantity",
+                "transactTime",
+            ]
+        )
+        frame.id = 90001
+        frame.orderId = 55555
+        frame.symbol = "TSLA"
+        frame.action = "BUY"
+        frame.filledPrice = 242.75
+        frame.filledQuantity = 20
+        frame.transactTime = 1700000060000
+
+        result = serialize_transaction(frame)
+
+        assert result["id"] == 90001
+        assert result["orderId"] == 55555
+        assert result["symbol"] == "TSLA"
+        assert result["action"] == "BUY"
+        assert result["filledPrice"] == 242.75
+        assert result["filledQuantity"] == 20
+        assert result["transactTime"] == 1700000060000
+        assert len(result) == 7
