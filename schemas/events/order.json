@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tiger-events-order",
+  "title": "Tiger Brokers Order Status Event",
+  "description": "Schema for order status change events published to Redis streams via XADD. Field names match the OrderStatusData protobuf definition exactly (camelCase).",
+  "type": "object",
+  "properties": {
+    "account": {
+      "type": "string",
+      "description": "Tiger Brokers account identifier."
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "Event timestamp from Tiger Brokers (epoch milliseconds as string)."
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the event was received by the subscriber."
+    },
+    "payload": {
+      "type": "string",
+      "description": "JSON-encoded order status payload.",
+      "contentMediaType": "application/json",
+      "contentSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Tiger Brokers internal order ID."
+          },
+          "account": {
+            "type": "string",
+            "description": "Account identifier."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Ticker symbol (e.g. AAPL)."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "Full contract identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Security name (e.g. Apple Inc)."
+          },
+          "secType": {
+            "type": "string",
+            "enum": ["STK", "OPT", "WAR", "IOPT", "CASH", "FUT", "FOP"],
+            "description": "Security type."
+          },
+          "market": {
+            "type": "string",
+            "description": "Market code (e.g. US, HK)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency code (e.g. USD)."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["BUY", "SELL"],
+            "description": "Order action."
+          },
+          "orderType": {
+            "type": "string",
+            "description": "Order type (e.g. LMT, MKT, STP, STP_LMT)."
+          },
+          "timeInForce": {
+            "type": "string",
+            "description": "Time in force (e.g. DAY, GTC)."
+          },
+          "status": {
+            "type": "string",
+            "description": "Order status (e.g. FILLED, PARTIALLY_FILLED, CANCELLED)."
+          },
+          "totalQuantity": {
+            "type": "integer",
+            "description": "Total order quantity."
+          },
+          "filledQuantity": {
+            "type": "integer",
+            "description": "Cumulative filled quantity across all executions."
+          },
+          "avgFillPrice": {
+            "type": "number",
+            "description": "Average fill price across all executions."
+          },
+          "limitPrice": {
+            "type": "number",
+            "description": "Limit price if applicable."
+          },
+          "stopPrice": {
+            "type": "number",
+            "description": "Stop price if applicable."
+          },
+          "totalCashAmount": {
+            "type": "number",
+            "description": "Total cash amount for by-amount orders."
+          },
+          "filledCashAmount": {
+            "type": "number",
+            "description": "Filled cash amount."
+          },
+          "commissionAndFee": {
+            "type": "number",
+            "description": "Commission and fee."
+          },
+          "realizedPnl": {
+            "type": "number",
+            "description": "Realized profit and loss."
+          },
+          "outsideRth": {
+            "type": "boolean",
+            "description": "Whether the order can execute outside regular trading hours."
+          },
+          "openTime": {
+            "type": "integer",
+            "description": "Order open time (epoch milliseconds)."
+          },
+          "timestamp": {
+            "type": "integer",
+            "description": "Last update timestamp (epoch milliseconds)."
+          }
+        }
+      }
+    }
+  },
+  "required": ["account", "received_at", "payload"]
+}

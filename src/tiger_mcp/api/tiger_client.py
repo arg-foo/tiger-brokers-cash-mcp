@@ -13,16 +13,16 @@ import logging
 import time
 from typing import Any
 
-from tigeropen.common.consts import BarPeriod, Language, OrderStatus
+from tigeropen.common.consts import BarPeriod, OrderStatus
 from tigeropen.common.util.contract_utils import stock_contract
 from tigeropen.common.util.order_utils import (
     limit_order,
     stop_limit_order,
 )
 from tigeropen.quote.quote_client import QuoteClient
-from tigeropen.tiger_open_config import TigerOpenClientConfig
 from tigeropen.trade.trade_client import TradeClient
 
+from tiger_mcp.api.config_factory import build_client_config
 from tiger_mcp.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -75,12 +75,7 @@ class TigerClient:
     """
 
     def __init__(self, config: Settings) -> None:
-        client_config = TigerOpenClientConfig(sandbox_debug=False)
-        client_config.private_key = config.private_key_path.read_text()
-        client_config.tiger_id = config.tiger_id
-        client_config.account = config.tiger_account
-        client_config.license = 'TBSG'
-        client_config.language = Language.en_US
+        client_config = build_client_config(config)
 
         self._trade_client = TradeClient(client_config)
         self._quote_client = QuoteClient(client_config)

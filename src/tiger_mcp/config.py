@@ -33,6 +33,14 @@ class Settings:
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8000
 
+    # --- Event subscription (Tiger PushClient → Redis) ---
+    events_enabled: bool = False
+    redis_url: str = ""
+    redis_stream_prefix: str = "tiger:events"
+    redis_stream_maxlen: int = 10_000
+    push_reconnect_max_attempts: int = 200
+    push_reconnect_base_delay: float = 1.0
+
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
@@ -83,6 +91,29 @@ class Settings:
         # MCP port must be a valid TCP port number.
         if not (1 <= self.mcp_port <= 65535):
             msg = f"mcp_port must be in range 1-65535, got {self.mcp_port}"
+            raise ValueError(msg)
+
+        # Event subscription validation.
+        if self.events_enabled and not self.redis_url:
+            msg = "redis_url is required when events_enabled is True"
+            raise ValueError(msg)
+        if self.push_reconnect_max_attempts < 0:
+            msg = (
+                "push_reconnect_max_attempts must be non-negative, "
+                f"got {self.push_reconnect_max_attempts}"
+            )
+            raise ValueError(msg)
+        if self.push_reconnect_base_delay <= 0:
+            msg = (
+                "push_reconnect_base_delay must be positive, "
+                f"got {self.push_reconnect_base_delay}"
+            )
+            raise ValueError(msg)
+        if self.redis_stream_maxlen <= 0:
+            msg = (
+                "redis_stream_maxlen must be positive, "
+                f"got {self.redis_stream_maxlen}"
+            )
             raise ValueError(msg)
 
     # ------------------------------------------------------------------
@@ -143,6 +174,46 @@ class Settings:
             msg = f"MCP_PORT must be a valid integer, got {mcp_port_raw!r}"
             raise ValueError(msg) from None
 
+        # --- optional: event subscription settings ---
+        events_enabled = os.environ.get(
+            "TIGER_EVENTS_ENABLED", "false"
+        ).lower() in ("true", "1", "yes")
+        redis_url = os.environ.get("REDIS_URL", "")
+        redis_stream_prefix = os.environ.get(
+            "REDIS_STREAM_PREFIX", "tiger:events"
+        )
+        redis_stream_maxlen_raw = os.environ.get("REDIS_STREAM_MAXLEN", "10000")
+        try:
+            redis_stream_maxlen = int(redis_stream_maxlen_raw)
+        except ValueError:
+            msg = (
+                "REDIS_STREAM_MAXLEN must be a valid integer, "
+                f"got {redis_stream_maxlen_raw!r}"
+            )
+            raise ValueError(msg) from None
+        push_reconnect_max_raw = os.environ.get(
+            "TIGER_PUSH_RECONNECT_MAX_ATTEMPTS", "200"
+        )
+        try:
+            push_reconnect_max_attempts = int(push_reconnect_max_raw)
+        except ValueError:
+            msg = (
+                "TIGER_PUSH_RECONNECT_MAX_ATTEMPTS must be a valid "
+                f"integer, got {push_reconnect_max_raw!r}"
+            )
+            raise ValueError(msg) from None
+        push_reconnect_base_raw = os.environ.get(
+            "TIGER_PUSH_RECONNECT_BASE_DELAY", "1.0"
+        )
+        try:
+            push_reconnect_base_delay = float(push_reconnect_base_raw)
+        except ValueError:
+            msg = (
+                "TIGER_PUSH_RECONNECT_BASE_DELAY must be a valid "
+                f"number, got {push_reconnect_base_raw!r}"
+            )
+            raise ValueError(msg) from None
+
         return cls(
             tiger_id=tiger_id,
             tiger_account=tiger_account,
@@ -154,4 +225,10 @@ class Settings:
             mcp_transport=mcp_transport,
             mcp_host=mcp_host,
             mcp_port=mcp_port,
+            events_enabled=events_enabled,
+            redis_url=redis_url,
+            redis_stream_prefix=redis_stream_prefix,
+            redis_stream_maxlen=redis_stream_maxlen,
+            push_reconnect_max_attempts=push_reconnect_max_attempts,
+            push_reconnect_base_delay=push_reconnect_base_delay,
         )
