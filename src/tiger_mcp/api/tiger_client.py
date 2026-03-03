@@ -123,7 +123,7 @@ class TigerClient:
         contract = stock_contract(symbol=symbol, currency="USD")
 
         if order_type == "limit":
-            return limit_order(
+            order = limit_order(
                 account=self._account,
                 contract=contract,
                 action=action,
@@ -131,8 +131,10 @@ class TigerClient:
                 limit_price=limit_price,
                 time_in_force=_TIME_IN_FORCE,
             )
+            order.outside_rth = False
+            return order
         if order_type == "stop_limit":
-            return stop_limit_order(
+            order = stop_limit_order(
                 account=self._account,
                 contract=contract,
                 action=action,
@@ -141,6 +143,8 @@ class TigerClient:
                 aux_price=stop_price,
                 time_in_force=_TIME_IN_FORCE,
             )
+            order.outside_rth = False
+            return order
 
         msg = f"Unsupported order type: {order_type!r}"
         raise ValueError(msg)
