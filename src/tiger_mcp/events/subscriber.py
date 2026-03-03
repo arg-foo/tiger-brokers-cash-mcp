@@ -50,10 +50,12 @@ class PushSubscriber:
     def start(self) -> None:
         """Connect the PushClient and subscribe to order status events."""
         self._client_config = build_client_config(self._settings)
+        host_port = self._client_config.socket_host_port
+        # socket_host_port is a tuple of (protocol, host, port)
         self._push_client = PushClient(
-            self._client_config.tiger_id,
-            self._client_config.private_key,
-            sign_type=None,
+            host_port[1],
+            host_port[2],
+            use_ssl=(host_port[0] == "ssl"),
         )
         self._push_client.order_changed = self._on_order_changed
         self._push_client.transaction_changed = self._on_transaction_changed
@@ -62,9 +64,8 @@ class PushSubscriber:
         self._push_client.error_callback = self._on_error
 
         self._push_client.connect(
-            self._client_config.server_address,
-            self._client_config.socket_port,
-            use_ssl=True,
+            self._client_config.tiger_id,
+            self._client_config.private_key,
         )
         logger.info(
             "push_subscriber_started",
@@ -229,9 +230,8 @@ class PushSubscriber:
             try:
                 if self._push_client is not None:
                     self._push_client.connect(
-                        self._client_config.server_address,
-                        self._client_config.socket_port,
-                        use_ssl=True,
+                        self._client_config.tiger_id,
+                        self._client_config.private_key,
                     )
                     # _on_connected callback handles re-subscribing
                     return

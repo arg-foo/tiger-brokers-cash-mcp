@@ -38,13 +38,14 @@ TIGER_MAX_POSITION_PCT=0.25
 
 ### 3. Place your private key
 
-Copy your Tiger Brokers RSA private key to the project root:
+Copy your Tiger Brokers RSA private key into the `secrets/` directory:
 
 ```bash
-cp /path/to/your/private.pem ./private.pem
+mkdir -p secrets
+cp /path/to/your/private.pem ./secrets/private.pem
 ```
 
-> The key is mounted read-only into the container at `/secrets/private.pem`. Never commit this file to git (it's already in `.gitignore`).
+> The key is mounted read-only into the container at `/secrets/private.pem`. Never commit this file to git (the `secrets/` directory is already in `.gitignore`).
 
 ### 4. Start the server
 
@@ -60,9 +61,11 @@ curl http://localhost:8000/health
 
 ### 5. Connect your MCP client
 
-Point your MCP client to `http://localhost:8000` using the `streamable-http` transport.
+When running via Docker, the server uses the `streamable-http` transport on port **8000**. Point your MCP client to `http://localhost:8000/mcp`.
 
-**Claude Desktop example** (`claude_desktop_config.json`):
+> If you changed `MCP_PORT` in your `.env`, replace `8000` with your chosen port in the URLs below.
+
+**Claude Desktop** — add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -74,7 +77,7 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
 }
 ```
 
-**Claude Code example** (`.mcp.json`):
+**Claude Code** — add to `.mcp.json` in your project root (or `~/.claude/.mcp.json` for global access):
 
 ```json
 {
@@ -85,6 +88,29 @@ Point your MCP client to `http://localhost:8000` using the `streamable-http` tra
     }
   }
 }
+```
+
+**Other MCP clients** — use any client that supports the `streamable-http` transport with the URL `http://localhost:8000/mcp`.
+
+> **Remote access**: To connect from another machine, replace `localhost` with the host's IP or hostname. Ensure port 8000 is open and consider placing a reverse proxy (e.g. nginx, Caddy) in front for TLS.
+
+### Docker Management
+
+```bash
+# View logs
+docker compose logs -f tiger-mcp
+
+# Restart the server
+docker compose restart tiger-mcp
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Stop everything
+docker compose down
+
+# Stop and remove volumes (clears all persistent data)
+docker compose down -v
 ```
 
 ## Available Tools
@@ -159,13 +185,19 @@ Six pre-trade checks run automatically before every order placement:
 | `MCP_TRANSPORT` | No | `stdio` | Transport protocol: `stdio` or `streamable-http` |
 | `MCP_HOST` | No | `0.0.0.0` | Bind host for HTTP transport |
 | `MCP_PORT` | No | `8000` | Bind port for HTTP transport |
+| `REDIS_PORT` | No | `6379` | Host port for Redis (Docker only) |
+| `TIGER_EVENTS_ENABLED` | No | `false` | Enable Tiger WebSocket event subscription (`true` by default in Docker) |
+| `REDIS_URL` | No | - | Redis connection URL (required if events enabled, set automatically in Docker) |
+| `REDIS_STREAM_PREFIX` | No | `tiger:events` | Redis stream key prefix |
+| `REDIS_STREAM_MAXLEN` | No | `10000` | Max entries per Redis stream |
 
 ### Docker Volumes
 
 | Mount | Purpose |
 |-------|---------|
-| `./private.pem:/secrets/private.pem:ro` | RSA private key (read-only) |
+| `./secrets/private.pem:/secrets/private.pem:ro` | RSA private key (read-only) |
 | `tiger-state:/data/state` | Persistent state (daily P&L tracking, duplicate order detection) |
+| `redis-data:/data` | Persistent Redis data (event streams) |
 
 ## Local Development (without Docker)
 

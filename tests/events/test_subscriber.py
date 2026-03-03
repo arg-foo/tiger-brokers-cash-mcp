@@ -65,8 +65,7 @@ def mock_client_config() -> MagicMock:
     config = MagicMock()
     config.tiger_id = "test-tiger-id"
     config.private_key = "fake-key-content"
-    config.server_address = "openapi.itigerup.com"
-    config.socket_port = 8883
+    config.socket_host_port = ("ssl", "openapi.itigerup.com", 9883)
     return config
 
 
@@ -96,14 +95,13 @@ class TestStart:
 
         mock_build_config.assert_called_once_with(subscriber._settings)
         mock_push_client_cls.assert_called_once_with(
-            mock_client_config.tiger_id,
-            mock_client_config.private_key,
-            sign_type=None,
+            "openapi.itigerup.com",
+            9883,
+            use_ssl=True,
         )
         mock_push_instance.connect.assert_called_once_with(
-            mock_client_config.server_address,
-            mock_client_config.socket_port,
-            use_ssl=True,
+            mock_client_config.tiger_id,
+            mock_client_config.private_key,
         )
 
     @patch("tiger_mcp.events.subscriber.build_client_config")
@@ -1228,7 +1226,6 @@ class TestReconnectWithBackoff:
         # build_client_config should NOT be called during reconnect
         mock_build.assert_not_called()
         subscriber._push_client.connect.assert_called_once_with(
-            mock_client_config.server_address,
-            mock_client_config.socket_port,
-            use_ssl=True,
+            mock_client_config.tiger_id,
+            mock_client_config.private_key,
         )
