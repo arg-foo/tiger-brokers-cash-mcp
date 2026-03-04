@@ -118,7 +118,7 @@ class PushSubscriber:
             The envelope model class to construct from the serialized data.
         """
         try:
-            received_at = datetime.now(UTC).isoformat()
+            received_at = datetime.now(UTC)
             payload_dict = serializer(frame)
             account = getattr(frame, "account", self._settings.tiger_account)
             raw_ts = getattr(frame, "timestamp", None)
