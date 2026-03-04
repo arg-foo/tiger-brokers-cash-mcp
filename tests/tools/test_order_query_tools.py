@@ -44,7 +44,7 @@ class TestGetOpenOrders:
         """get_open_orders should return readable text when orders exist."""
         mock_client.get_open_orders.return_value = [
             {
-                "order_id": 12345,
+                "order_id": "12345",
                 "symbol": "AAPL",
                 "action": "BUY",
                 "quantity": 100,
@@ -55,7 +55,7 @@ class TestGetOpenOrders:
                 "trade_time": "2026-02-16 10:30:00",
             },
             {
-                "order_id": 67890,
+                "order_id": "67890",
                 "symbol": "GOOGL",
                 "action": "SELL",
                 "quantity": 20,
@@ -88,7 +88,7 @@ class TestGetOpenOrders:
         """get_open_orders should uppercase the symbol filter before calling client."""
         mock_client.get_open_orders.return_value = [
             {
-                "order_id": 12345,
+                "order_id": "12345",
                 "symbol": "AAPL",
                 "action": "BUY",
                 "quantity": 100,
@@ -154,7 +154,7 @@ class TestGetOrderDetail:
     ) -> None:
         """get_order_detail should return all order fields as readable text."""
         mock_client.get_order_detail.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "symbol": "AAPL",
             "action": "BUY",
             "order_type": "limit",
@@ -169,9 +169,9 @@ class TestGetOrderDetail:
             "commission": 1.99,
         }
 
-        result = await order_query_mod.get_order_detail(order_id=12345)
+        result = await order_query_mod.get_order_detail(order_id="12345")
 
-        mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
+        mock_client.get_order_detail.assert_awaited_once_with(order_id="12345")
         assert "12345" in result
         assert "AAPL" in result
         assert "BUY" in result
@@ -193,7 +193,7 @@ class TestGetOrderDetail:
             "get_order_detail failed: Order not found"
         )
 
-        result = await order_query_mod.get_order_detail(order_id=99999)
+        result = await order_query_mod.get_order_detail(order_id="99999")
 
         assert "error" in result.lower() or "Error" in result
         assert "99999" in result
@@ -204,7 +204,7 @@ class TestGetOrderDetail:
     ) -> None:
         """get_order_detail should display all available order fields."""
         mock_client.get_order_detail.return_value = {
-            "order_id": 55555,
+            "order_id": "55555",
             "symbol": "TSLA",
             "action": "SELL",
             "order_type": "market",
@@ -219,7 +219,7 @@ class TestGetOrderDetail:
             "commission": 2.50,
         }
 
-        result = await order_query_mod.get_order_detail(order_id=55555)
+        result = await order_query_mod.get_order_detail(order_id="55555")
 
         assert "55555" in result
         assert "TSLA" in result

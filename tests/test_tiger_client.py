@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from tiger_mcp.api.tiger_client import _parse_order_id
 from tiger_mcp.config import Settings
 
 # ---------------------------------------------------------------------------
@@ -103,12 +104,8 @@ class TestTigerClientConstruction:
                 "tiger_mcp.api.tiger_client.build_client_config",
                 return_value=mock_cfg,
             ) as mock_build,
-            patch(
-                "tiger_mcp.api.tiger_client.TradeClient"
-            ) as mock_trade_cls,
-            patch(
-                "tiger_mcp.api.tiger_client.QuoteClient"
-            ) as mock_quote_cls,
+            patch("tiger_mcp.api.tiger_client.TradeClient") as mock_trade_cls,
+            patch("tiger_mcp.api.tiger_client.QuoteClient") as mock_quote_cls,
         ):
             from tiger_mcp.api.tiger_client import TigerClient
 
@@ -226,9 +223,7 @@ class TestBuildClientConfig:
 class TestAsyncWrapping:
     """Test that all methods are async coroutines using run_in_executor."""
 
-    def test_all_public_methods_are_coroutines(
-        self, tiger_client: Any
-    ) -> None:
+    def test_all_public_methods_are_coroutines(self, tiger_client: Any) -> None:
         """Every public method (except helpers) should be a coroutine."""
         public_methods = [
             "get_assets",
@@ -454,7 +449,7 @@ class TestOrderMethods:
         )
 
         mock_trade_client.place_order.assert_called_once()
-        assert result["order_id"] == 12346
+        assert result["order_id"] == "12346"
 
     async def test_place_order_stop_limit(
         self,
@@ -478,7 +473,7 @@ class TestOrderMethods:
         )
 
         mock_trade_client.place_order.assert_called_once()
-        assert result["order_id"] == 12348
+        assert result["order_id"] == "12348"
 
     async def test_modify_order_calls_sdk(
         self,
@@ -490,7 +485,7 @@ class TestOrderMethods:
         mock_trade_client.get_order.return_value = MagicMock()
 
         result = await tiger_client.modify_order(
-            order_id=12345,
+            order_id="12345",
             quantity=20,
             limit_price=155.0,
         )
@@ -514,7 +509,7 @@ class TestOrderMethods:
         mock_trade_client.modify_order.return_value = 12345
 
         await tiger_client.modify_order(
-            order_id=12345,
+            order_id="12345",
             quantity=20,
             limit_price=155.0,
         )
@@ -534,11 +529,11 @@ class TestOrderMethods:
         """cancel_order() should call TradeClient.cancel_order()."""
         mock_trade_client.cancel_order.return_value = 12345
 
-        result = await tiger_client.cancel_order(order_id=12345)
+        result = await tiger_client.cancel_order(order_id="12345")
 
         mock_trade_client.cancel_order.assert_called_once()
         assert isinstance(result, dict)
-        assert result["order_id"] == 12345
+        assert result["order_id"] == "12345"
 
     async def test_cancel_all_orders_calls_sdk(
         self,
@@ -594,7 +589,7 @@ class TestOrderMethods:
         mock_order.id = 12345
         mock_trade_client.get_order.return_value = mock_order
 
-        result = await tiger_client.get_order_detail(order_id=12345)
+        result = await tiger_client.get_order_detail(order_id="12345")
 
         mock_trade_client.get_order.assert_called_once()
         assert isinstance(result, dict)
@@ -657,9 +652,7 @@ class TestQuoteCache:
         mock_quote_client: MagicMock,
     ) -> None:
         """get_bars() should NOT cache results."""
-        df = pd.DataFrame(
-            [{"time": "2024-01-01", "open": 148.0}]
-        )
+        df = pd.DataFrame([{"time": "2024-01-01", "open": 148.0}])
         mock_quote_client.get_bars.return_value = df
 
         await tiger_client.get_bars("AAPL", "day")
@@ -682,9 +675,7 @@ class TestErrorHandling:
         mock_trade_client: MagicMock,
     ) -> None:
         """SDK exception from get_assets() should become RuntimeError."""
-        mock_trade_client.get_assets.side_effect = Exception(
-            "API connection failed"
-        )
+        mock_trade_client.get_assets.side_effect = Exception("API connection failed")
 
         with pytest.raises(RuntimeError, match="get_assets.*API connection failed"):
             await tiger_client.get_assets()
@@ -695,9 +686,7 @@ class TestErrorHandling:
         mock_trade_client: MagicMock,
     ) -> None:
         """SDK exception from place_order() should become RuntimeError."""
-        mock_trade_client.place_order.side_effect = Exception(
-            "Insufficient funds"
-        )
+        mock_trade_client.place_order.side_effect = Exception("Insufficient funds")
 
         with pytest.raises(RuntimeError, match="place_order.*Insufficient funds"):
             await tiger_client.place_order(
@@ -714,12 +703,10 @@ class TestErrorHandling:
         mock_trade_client: MagicMock,
     ) -> None:
         """SDK exception from cancel_order() should become RuntimeError."""
-        mock_trade_client.cancel_order.side_effect = Exception(
-            "Order not found"
-        )
+        mock_trade_client.cancel_order.side_effect = Exception("Order not found")
 
         with pytest.raises(RuntimeError, match="cancel_order.*Order not found"):
-            await tiger_client.cancel_order(order_id=99999)
+            await tiger_client.cancel_order(order_id="99999")
 
     async def test_modify_order_error_wraps_exception(
         self,
@@ -727,13 +714,11 @@ class TestErrorHandling:
         mock_trade_client: MagicMock,
     ) -> None:
         """SDK exception from modify_order() should become RuntimeError."""
-        mock_trade_client.get_order.side_effect = Exception(
-            "Order not found"
-        )
+        mock_trade_client.get_order.side_effect = Exception("Order not found")
 
         with pytest.raises(RuntimeError, match="modify_order.*Order not found"):
             await tiger_client.modify_order(
-                order_id=99999,
+                order_id="99999",
                 quantity=20,
             )
 
@@ -743,9 +728,7 @@ class TestErrorHandling:
         mock_quote_client: MagicMock,
     ) -> None:
         """SDK exception from get_bars() should become RuntimeError."""
-        mock_quote_client.get_bars.side_effect = Exception(
-            "Invalid period"
-        )
+        mock_quote_client.get_bars.side_effect = Exception("Invalid period")
 
         with pytest.raises(RuntimeError, match="get_bars.*Invalid period"):
             await tiger_client.get_bars("AAPL", "invalid_period")
@@ -756,14 +739,10 @@ class TestErrorHandling:
         mock_trade_client: MagicMock,
     ) -> None:
         """SDK exception from get_order_detail() should become RuntimeError."""
-        mock_trade_client.get_order.side_effect = Exception(
-            "Connection timeout"
-        )
+        mock_trade_client.get_order.side_effect = Exception("Connection timeout")
 
-        with pytest.raises(
-            RuntimeError, match="get_order_detail.*Connection timeout"
-        ):
-            await tiger_client.get_order_detail(order_id=12345)
+        with pytest.raises(RuntimeError, match="get_order_detail.*Connection timeout"):
+            await tiger_client.get_order_detail(order_id="12345")
 
 
 # ---------------------------------------------------------------------------
@@ -776,9 +755,7 @@ class TestBuildOrder:
 
     def test_build_limit_order(self, tiger_client: Any) -> None:
         """_build_order with limit type should use limit_order utility."""
-        with patch(
-            "tiger_mcp.api.tiger_client.limit_order"
-        ) as mock_limit_order:
+        with patch("tiger_mcp.api.tiger_client.limit_order") as mock_limit_order:
             mock_limit_order.return_value = MagicMock()
             tiger_client._build_order(
                 symbol="AAPL",
@@ -795,9 +772,7 @@ class TestBuildOrder:
 
     def test_build_stop_limit_order(self, tiger_client: Any) -> None:
         """_build_order with stop_limit type should use stop_limit_order."""
-        with patch(
-            "tiger_mcp.api.tiger_client.stop_limit_order"
-        ) as mock_sl_order:
+        with patch("tiger_mcp.api.tiger_client.stop_limit_order") as mock_sl_order:
             mock_sl_order.return_value = MagicMock()
             tiger_client._build_order(
                 symbol="AAPL",
@@ -813,9 +788,7 @@ class TestBuildOrder:
                 "stop_limit_order must be called with time_in_force='GTC'"
             )
 
-    def test_build_unknown_order_type_raises(
-        self, tiger_client: Any
-    ) -> None:
+    def test_build_unknown_order_type_raises(self, tiger_client: Any) -> None:
         """_build_order with unknown order type should raise ValueError."""
         with pytest.raises(ValueError, match="(?i)unsupported.*order.*type"):
             tiger_client._build_order(
@@ -824,3 +797,71 @@ class TestBuildOrder:
                 quantity=10,
                 order_type="trailing_stop",
             )
+
+
+# ---------------------------------------------------------------------------
+# _parse_order_id helper
+# ---------------------------------------------------------------------------
+
+
+class TestParseOrderId:
+    """Test the _parse_order_id module-level helper."""
+
+    def test_parse_order_id_valid(self) -> None:
+        """_parse_order_id should convert a valid numeric string to int."""
+        assert _parse_order_id("12345") == 12345
+
+    def test_parse_order_id_non_numeric(self) -> None:
+        """_parse_order_id should raise ValueError for non-numeric input."""
+        with pytest.raises(ValueError, match="numeric string"):
+            _parse_order_id("abc")
+
+    def test_parse_order_id_empty(self) -> None:
+        """_parse_order_id should raise ValueError for empty string."""
+        with pytest.raises(ValueError, match="numeric string"):
+            _parse_order_id("")
+
+    def test_parse_order_id_negative(self) -> None:
+        """_parse_order_id should raise ValueError for negative values."""
+        with pytest.raises(ValueError, match="positive integer"):
+            _parse_order_id("-1")
+
+
+# ---------------------------------------------------------------------------
+# _order_to_dict ID field conversion
+# ---------------------------------------------------------------------------
+
+
+class TestOrderToDictIdConversion:
+    """Test that _order_to_dict converts ID fields to str."""
+
+    def test_order_to_dict_converts_id_fields_to_str(self, tiger_client: Any) -> None:
+        """_order_to_dict should convert id and order_id to str."""
+        from tiger_mcp.api.tiger_client import TigerClient
+
+        mock_order = MagicMock()
+        mock_order.id = 99999
+        mock_order.order_id = 99999
+        mock_order.symbol = "AAPL"
+        for attr in (
+            "order_type",
+            "quantity",
+            "filled",
+            "avg_fill_price",
+            "limit_price",
+            "aux_price",
+            "status",
+            "remaining",
+            "trade_time",
+            "commission",
+            "action",
+        ):
+            setattr(mock_order, attr, None)
+
+        result = TigerClient._order_to_dict(mock_order)
+
+        assert result["id"] == "99999"
+        assert isinstance(result["id"], str)
+        assert result["order_id"] == "99999"
+        assert isinstance(result["order_id"], str)
+        assert result["symbol"] == "AAPL"  # non-ID field stays as-is

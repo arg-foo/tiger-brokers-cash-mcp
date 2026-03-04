@@ -165,8 +165,7 @@ async def _run_modify_safety_checks(
     order_type = detail.get("order_type", "LMT")
     effective_qty = quantity if quantity is not None else detail.get("quantity", 0)
     effective_price = (
-        limit_price if limit_price is not None
-        else detail.get("limit_price")
+        limit_price if limit_price is not None else detail.get("limit_price")
     )
     stop_price = detail.get("aux_price")
 
@@ -212,7 +211,7 @@ async def _run_modify_safety_checks(
 
 @mcp.tool()
 async def modify_order(
-    order_id: int,
+    order_id: str,
     quantity: int | None = None,
     limit_price: float | None = None,
     stop_price: float | None = None,
@@ -231,7 +230,7 @@ async def modify_order(
     Parameters
     ----------
     order_id:
-        The numeric order identifier to modify.
+        The order identifier to modify.
     quantity:
         New order quantity (number of shares).  Pass ``None`` to leave
         unchanged.
@@ -262,17 +261,18 @@ async def modify_order(
             order_id=order_id,
         )
     except Exception as exc:
-        return (
-            f"Error: Could not retrieve order {order_id}. "
-            f"Details: {exc}"
-        )
+        return f"Error: Could not retrieve order {order_id}. Details: {exc}"
 
     # Run full safety checks if the modification increases risk on a BUY.
     safety_result: SafetyResult | None = None
     if _needs_safety_checks(detail, quantity, limit_price):
         try:
             safety_result = await _run_modify_safety_checks(
-                _client, _state, detail, quantity, limit_price,
+                _client,
+                _state,
+                detail,
+                quantity,
+                limit_price,
             )
         except Exception as exc:
             return (
@@ -303,10 +303,7 @@ async def modify_order(
             stop_price=stop_price,
         )
     except Exception as exc:
-        return (
-            f"Error: Failed to modify order {order_id}. "
-            f"Details: {exc}"
-        )
+        return f"Error: Failed to modify order {order_id}. Details: {exc}"
 
     changes: dict[str, Any] = {}
     if quantity is not None:
@@ -327,11 +324,13 @@ async def modify_order(
         f"  Symbol: {symbol}",
         f"  Changes: {mod_str}",
     ]
-    lines.extend([
-        "",
-        "Original Order:",
-        _format_order_summary(detail),
-    ])
+    lines.extend(
+        [
+            "",
+            "Original Order:",
+            _format_order_summary(detail),
+        ]
+    )
 
     # Append safety warnings if any.
     if safety_result is not None and safety_result.warnings:
@@ -344,7 +343,7 @@ async def modify_order(
 
 
 @mcp.tool()
-async def cancel_order(order_id: int) -> str:
+async def cancel_order(order_id: str) -> str:
     """Cancel a single order by its ID.
 
     Validates the order exists by fetching its detail before attempting
@@ -353,7 +352,7 @@ async def cancel_order(order_id: int) -> str:
     Parameters
     ----------
     order_id:
-        The numeric order identifier to cancel.
+        The order identifier to cancel.
 
     Returns
     -------
@@ -370,19 +369,13 @@ async def cancel_order(order_id: int) -> str:
             order_id=order_id,
         )
     except Exception as exc:
-        return (
-            f"Error: Could not retrieve order {order_id}. "
-            f"Details: {exc}"
-        )
+        return f"Error: Could not retrieve order {order_id}. Details: {exc}"
 
     # Cancel the order.
     try:
         await _client.cancel_order(order_id=order_id)
     except Exception as exc:
-        return (
-            f"Error: Failed to cancel order {order_id}. "
-            f"Details: {exc}"
-        )
+        return f"Error: Failed to cancel order {order_id}. Details: {exc}"
 
     symbol = detail.get("symbol", "N/A")
     action = detail.get("action", "N/A")
@@ -425,7 +418,7 @@ async def cancel_all_orders() -> str:
     if not results:
         return "No open orders to cancel."
 
-    order_ids = [str(r.get("order_id", "N/A")) for r in results]
+    order_ids = [r.get("order_id", "N/A") for r in results]
     count = len(results)
 
     lines = [
