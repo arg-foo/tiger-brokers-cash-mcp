@@ -16,6 +16,11 @@ from tigeropen.push.push_client import PushClient
 
 from tiger_mcp.api.config_factory import build_client_config
 from tiger_mcp.config import Settings
+from tiger_mcp.events.models import (
+    OrderStatusEvent,
+    TransactionEvent,
+    _BaseEvent,
+)
 from tiger_mcp.events.publisher import RedisStreamPublisher
 from tiger_mcp.events.serializers import serialize_order_status, serialize_transaction
 
@@ -94,6 +99,8 @@ class PushSubscriber:
         serializer: Callable[[Any], dict[str, Any]],
         event_type: str,
         error_key: str,
+        *,
+        model_cls: type[_BaseEvent],
     ) -> None:
         """Serialize a PushClient frame and publish to Redis streams.
 
@@ -107,26 +114,30 @@ class PushSubscriber:
             Event type string passed to the publisher (e.g. "order").
         error_key:
             Structured-logging key used when an exception is caught.
+        model_cls:
+            The envelope model class to construct from the serialized data.
         """
         try:
             received_at = datetime.now(UTC).isoformat()
-            payload = serializer(frame)
+            payload_dict = serializer(frame)
             account = getattr(frame, "account", self._settings.tiger_account)
-            timestamp = str(getattr(frame, "timestamp", ""))
-            self._publisher.publish(
-                event_type=event_type,
-                payload=payload,
+            raw_ts = getattr(frame, "timestamp", None)
+            timestamp = str(raw_ts) if raw_ts is not None else None
+            event = model_cls(
                 account=account or self._settings.tiger_account,
                 timestamp=timestamp,
                 received_at=received_at,
+                payload=payload_dict,
             )
+            self._publisher.publish(event_type, event)
         except Exception:
             logger.error(error_key, exc_info=True)
 
     def _on_order_changed(self, frame: Any) -> None:
         """Handle order status change events from PushClient."""
         self._handle_event(
-            frame, serialize_order_status, "order", "order_event_processing_failed"
+            frame, serialize_order_status, "order", "order_event_processing_failed",
+            model_cls=OrderStatusEvent,
         )
 
     def _on_transaction_changed(self, frame: Any) -> None:
@@ -136,6 +147,7 @@ class PushSubscriber:
             serialize_transaction,
             "transaction",
             "transaction_event_processing_failed",
+            model_cls=TransactionEvent,
         )
 
     def _on_connected(self, frame: Any) -> None:

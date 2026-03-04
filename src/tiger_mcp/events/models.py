@@ -111,7 +111,28 @@ class TransactionPayload(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class OrderStatusEvent(BaseModel):
+class _BaseEvent(BaseModel):
+    """Internal base class for event envelope models.
+
+    Contains the shared envelope fields common to all event types.
+    Subclasses add a typed ``payload`` field and their own ``model_config``.
+    """
+
+    account: str = Field(description="Tiger Brokers account identifier.")
+    timestamp: str | None = Field(
+        default=None,
+        description=(
+            "Event timestamp from Tiger Brokers"
+            " (epoch milliseconds as string)."
+        ),
+    )
+    received_at: str = Field(
+        description="ISO 8601 timestamp when the event was received by the subscriber.",
+        json_schema_extra={"format": "date-time"},
+    )
+
+
+class OrderStatusEvent(_BaseEvent):
     """Full Redis stream event for order status changes."""
 
     model_config = ConfigDict(json_schema_extra={
@@ -119,28 +140,12 @@ class OrderStatusEvent(BaseModel):
         "$id": "tiger-events-order",
     })
 
-    account: str = Field(description="Tiger Brokers account identifier.")
-    timestamp: str | None = Field(
-        default=None,
-        description=(
-            "Event timestamp from Tiger Brokers"
-            " (epoch milliseconds as string)."
-        ),
-    )
-    received_at: str = Field(
-        description="ISO 8601 timestamp when the event was received by the subscriber.",
-        json_schema_extra={"format": "date-time"},
-    )
-    payload: str = Field(
+    payload: OrderStatusPayload = Field(
         description="JSON-encoded order status payload.",
-        json_schema_extra={
-            "contentMediaType": "application/json",
-            "contentSchema": OrderStatusPayload.model_json_schema(),
-        },
     )
 
 
-class TransactionEvent(BaseModel):
+class TransactionEvent(_BaseEvent):
     """Full Redis stream event for transaction (execution/fill) changes."""
 
     model_config = ConfigDict(json_schema_extra={
@@ -148,24 +153,8 @@ class TransactionEvent(BaseModel):
         "$id": "tiger-events-transaction",
     })
 
-    account: str = Field(description="Tiger Brokers account identifier.")
-    timestamp: str | None = Field(
-        default=None,
-        description=(
-            "Event timestamp from Tiger Brokers"
-            " (epoch milliseconds as string)."
-        ),
-    )
-    received_at: str = Field(
-        description="ISO 8601 timestamp when the event was received by the subscriber.",
-        json_schema_extra={"format": "date-time"},
-    )
-    payload: str = Field(
+    payload: TransactionPayload = Field(
         description="JSON-encoded transaction payload.",
-        json_schema_extra={
-            "contentMediaType": "application/json",
-            "contentSchema": TransactionPayload.model_json_schema(),
-        },
     )
 
 
@@ -185,6 +174,58 @@ TRANSACTION_STR_FIELDS: frozenset[str] = frozenset({"id", "orderId"})
 
 
 # ---------------------------------------------------------------------------
+# Schema generation helpers
+# ---------------------------------------------------------------------------
+
+#: Registry mapping envelope models to their payload model counterpart.
+#: Used by ``generate_event_schema`` and the ``__main__`` CLI entry point.
+EVENT_SCHEMA_REGISTRY: list[tuple[str, type[_BaseEvent], type[BaseModel]]] = [
+    ("order", OrderStatusEvent, OrderStatusPayload),
+    ("transaction", TransactionEvent, TransactionPayload),
+]
+
+
+def generate_event_schema(
+    model: type[_BaseEvent],
+    payload_model: type[BaseModel],
+) -> dict:
+    """Generate a JSON schema for an event envelope model.
+
+    Post-processes the raw Pydantic schema to represent the ``payload``
+    field as a JSON-encoded string with ``contentMediaType`` /
+    ``contentSchema``, matching the wire format where payloads are
+    serialized as JSON strings inside Redis stream entries.
+
+    Parameters
+    ----------
+    model:
+        The envelope model class (e.g. ``OrderStatusEvent``).
+    payload_model:
+        The inner payload model class (e.g. ``OrderStatusPayload``).
+
+    Returns
+    -------
+    dict
+        The post-processed JSON schema dictionary.
+    """
+    schema = model.model_json_schema()
+    props = schema.get("properties", {})
+    if "payload" in props:
+        payload_schema = payload_model.model_json_schema()
+        description = props["payload"].get("description", "")
+        props["payload"] = {
+            "contentMediaType": "application/json",
+            "contentSchema": payload_schema,
+            "description": description,
+            "title": "Payload",
+            "type": "string",
+        }
+    # Remove $defs since the payload model is now inlined via contentSchema
+    schema.pop("$defs", None)
+    return schema
+
+
+# ---------------------------------------------------------------------------
 # Schema generation (CLI entry point)
 # ---------------------------------------------------------------------------
 
@@ -194,11 +235,9 @@ if __name__ == "__main__":
 
     schema_dir = Path(__file__).resolve().parents[3] / "schemas" / "events"
     schema_dir.mkdir(parents=True, exist_ok=True)
-    for name, model in [
-        ("order", OrderStatusEvent),
-        ("transaction", TransactionEvent),
-    ]:
+    for name, model, payload_model in EVENT_SCHEMA_REGISTRY:
+        schema = generate_event_schema(model, payload_model)
         (schema_dir / f"{name}.json").write_text(
-            json.dumps(model.model_json_schema(), indent=2) + "\n"
+            json.dumps(schema, indent=2) + "\n"
         )
     print("Schemas written to", schema_dir)

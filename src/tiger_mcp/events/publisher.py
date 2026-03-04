@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
-from typing import Any
 
-import orjson
 import redis
+
+from tiger_mcp.events.models import _BaseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -46,29 +45,15 @@ class RedisStreamPublisher:
         self._redis = client
         logger.info("redis_connected", extra={"url": self._redis_url})
 
-    def publish(
-        self,
-        event_type: str,
-        payload: dict[str, Any],
-        account: str = "",
-        timestamp: str = "",
-        received_at: str = "",
-    ) -> str | None:
+    def publish(self, event_type: str, event: _BaseEvent) -> str | None:
         """Publish an event to a Redis stream.
 
         Parameters
         ----------
         event_type:
             Event category (e.g. ``"order"``). Used as stream key suffix.
-        payload:
-            Event data to serialize as JSON.
-        account:
-            Tiger Brokers account identifier.
-        timestamp:
-            Event timestamp from Tiger Brokers.
-        received_at:
-            ISO 8601 timestamp of when the event was received by the
-            callback. Falls back to current time if not provided.
+        event:
+            A typed envelope model instance to serialize and publish.
 
         Returns
         -------
@@ -85,12 +70,7 @@ class RedisStreamPublisher:
             return None
 
         stream_key = f"{self._stream_prefix}:{event_type}"
-        fields = {
-            "account": account,
-            "timestamp": timestamp,
-            "received_at": received_at or datetime.now(UTC).isoformat(),
-            "payload": orjson.dumps(payload).decode(),
-        }
+        fields = {"data": event.model_dump_json(exclude_unset=True)}
 
         try:
             entry_id = client.xadd(
