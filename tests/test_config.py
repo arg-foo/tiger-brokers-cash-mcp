@@ -508,3 +508,82 @@ class TestEventsValidation:
             push_reconnect_max_attempts=0,
         )
         assert settings.push_reconnect_max_attempts == 0
+
+
+# ---------------------------------------------------------------------------
+# mcp_allowed_hosts field
+# ---------------------------------------------------------------------------
+
+
+class TestMcpAllowedHosts:
+    """Test the mcp_allowed_hosts configuration field."""
+
+    def test_defaults_to_empty_list(self, tmp_key_file: Path) -> None:
+        """Direct construction without mcp_allowed_hosts should default to []."""
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+        )
+        assert settings.mcp_allowed_hosts == []
+
+    def test_explicit_hosts(self, tmp_key_file: Path) -> None:
+        """Direct construction with explicit hosts should store them."""
+        settings = Settings(
+            tiger_id="id",
+            tiger_account="acct",
+            private_key_path=tmp_key_file,
+            mcp_allowed_hosts=["myhost.example.com:8080"],
+        )
+        assert settings.mcp_allowed_hosts == ["myhost.example.com:8080"]
+
+    def test_from_env_parses_comma_separated(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """MCP_ALLOWED_HOSTS should be parsed as comma-separated values."""
+        monkeypatch.setenv(
+            "MCP_ALLOWED_HOSTS", "host1.example.com:8080,host2.local:9090"
+        )
+        settings = Settings.from_env()
+        assert settings.mcp_allowed_hosts == [
+            "host1.example.com:8080",
+            "host2.local:9090",
+        ]
+
+    def test_from_env_strips_whitespace(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Whitespace around entries should be stripped."""
+        monkeypatch.setenv(
+            "MCP_ALLOWED_HOSTS", "  host1:80 , host2:90  ,  host3:100  "
+        )
+        settings = Settings.from_env()
+        assert settings.mcp_allowed_hosts == [
+            "host1:80",
+            "host2:90",
+            "host3:100",
+        ]
+
+    def test_from_env_filters_empty_strings(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty entries (e.g. trailing comma) should be filtered out."""
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "host1:80,,, host2:90,")
+        settings = Settings.from_env()
+        assert settings.mcp_allowed_hosts == ["host1:80", "host2:90"]
+
+    def test_from_env_empty_string_defaults_to_empty_list(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An empty MCP_ALLOWED_HOSTS should result in an empty list."""
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "")
+        settings = Settings.from_env()
+        assert settings.mcp_allowed_hosts == []
+
+    def test_from_env_unset_defaults_to_empty_list(
+        self, valid_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unset MCP_ALLOWED_HOSTS should result in an empty list."""
+        monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
+        settings = Settings.from_env()
+        assert settings.mcp_allowed_hosts == []

@@ -20,6 +20,7 @@ import sys
 
 import structlog
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from tiger_mcp.config import Settings
 
@@ -101,6 +102,38 @@ def configure_logging() -> None:
 
 
 # ---------------------------------------------------------------------------
+# DNS rebinding protection
+# ---------------------------------------------------------------------------
+
+_LOCALHOST_ALIASES = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _build_transport_security(
+    settings: Settings,
+) -> TransportSecuritySettings:
+    """Build transport security settings for DNS rebinding protection.
+
+    When ``settings.mcp_allowed_hosts`` is non-empty, those values are used
+    directly.  Otherwise the allowed hosts are auto-derived from
+    ``settings.mcp_host``: localhost aliases get all common loopback
+    variants, while non-local hosts get a ``host:*`` wildcard-port pattern.
+    """
+    if settings.mcp_allowed_hosts:
+        allowed_hosts = list(settings.mcp_allowed_hosts)
+    elif settings.mcp_host in _LOCALHOST_ALIASES:
+        allowed_hosts = ["localhost:*", "127.0.0.1:*", "[::1]:*"]
+    else:
+        allowed_hosts = [f"{settings.mcp_host}:*"]
+
+    allowed_origins = [f"http://{h}" for h in allowed_hosts]
+
+    return TransportSecuritySettings(
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Async entry point
 # ---------------------------------------------------------------------------
 
@@ -176,6 +209,9 @@ async def main() -> None:
         if settings.mcp_transport == "streamable-http":
             mcp.settings.host = settings.mcp_host
             mcp.settings.port = settings.mcp_port
+            mcp.settings.transport_security = _build_transport_security(
+                settings
+            )
             await mcp.run_streamable_http_async()
         else:
             await mcp.run_stdio_async()

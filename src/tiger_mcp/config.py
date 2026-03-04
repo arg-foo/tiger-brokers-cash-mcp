@@ -32,6 +32,7 @@ class Settings:
     mcp_transport: str = "stdio"
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8000
+    mcp_allowed_hosts: list[str] = field(default_factory=list)
 
     # --- Event subscription (Tiger PushClient → Redis) ---
     events_enabled: bool = False
@@ -174,6 +175,11 @@ class Settings:
             msg = f"MCP_PORT must be a valid integer, got {mcp_port_raw!r}"
             raise ValueError(msg) from None
 
+        mcp_allowed_hosts_raw = os.environ.get("MCP_ALLOWED_HOSTS", "")
+        mcp_allowed_hosts = [
+            h.strip() for h in mcp_allowed_hosts_raw.split(",") if h.strip()
+        ]
+
         # --- optional: event subscription settings ---
         events_enabled = os.environ.get(
             "TIGER_EVENTS_ENABLED", "false"
@@ -225,6 +231,7 @@ class Settings:
             mcp_transport=mcp_transport,
             mcp_host=mcp_host,
             mcp_port=mcp_port,
+            mcp_allowed_hosts=mcp_allowed_hosts,
             events_enabled=events_enabled,
             redis_url=redis_url,
             redis_stream_prefix=redis_stream_prefix,
