@@ -12,9 +12,11 @@ from unittest.mock import MagicMock
 import orjson
 import pytest
 
+from tiger_mcp.events.models import (
+    ORDER_STATUS_FIELD_NAMES,
+    TRANSACTION_FIELD_NAMES,
+)
 from tiger_mcp.events.serializers import (
-    _ORDER_STATUS_FIELDS,
-    _TRANSACTION_FIELDS,
     serialize_order_status,
     serialize_transaction,
 )
@@ -27,7 +29,7 @@ from tiger_mcp.events.serializers import (
 @pytest.fixture()
 def full_frame() -> MagicMock:
     """Return a mock frame with all recognized fields populated."""
-    frame = MagicMock(spec=list(_ORDER_STATUS_FIELDS))
+    frame = MagicMock(spec=list(ORDER_STATUS_FIELD_NAMES))
     # Identity
     frame.id = 12345
     frame.account = "DU12345"
@@ -101,7 +103,7 @@ def empty_frame() -> MagicMock:
 @pytest.fixture()
 def full_transaction_frame() -> MagicMock:
     """Return a mock transaction frame with all 17 recognized fields populated."""
-    frame = MagicMock(spec=list(_TRANSACTION_FIELDS))
+    frame = MagicMock(spec=list(TRANSACTION_FIELD_NAMES))
     # Identity
     frame.id = 98765
     frame.orderId = 12345
@@ -138,8 +140,8 @@ class TestSerializeOrderStatus:
         """When the frame has all recognized fields, all appear in result."""
         result = serialize_order_status(full_frame)
 
-        # Identity
-        assert result["id"] == 12345
+        # Identity (id is converted to string to prevent JS precision loss)
+        assert result["id"] == "12345"
         assert result["account"] == "DU12345"
         assert result["symbol"] == "AAPL"
         assert result["identifier"] == "AAPL"
@@ -166,7 +168,7 @@ class TestSerializeOrderStatus:
         assert result["openTime"] == 1700000000000
         assert result["timestamp"] == 1700000060000
         # All fields present
-        assert len(result) == len(_ORDER_STATUS_FIELDS)
+        assert len(result) == len(ORDER_STATUS_FIELD_NAMES)
 
     def test_serialize_missing_fields_omitted(self) -> None:
         """Attributes not present on the frame are silently omitted."""
@@ -176,7 +178,7 @@ class TestSerializeOrderStatus:
 
         result = serialize_order_status(frame)
 
-        assert "id" in result
+        assert result["id"] == "1"
         assert "symbol" in result
         assert "account" not in result
         assert "action" not in result
@@ -194,7 +196,7 @@ class TestSerializeOrderStatus:
 
         result = serialize_order_status(frame)
 
-        assert result["id"] == 42
+        assert result["id"] == "42"
         assert result["symbol"] == "MSFT"
         assert result["action"] is None
         assert result["limitPrice"] is None
@@ -204,7 +206,7 @@ class TestSerializeOrderStatus:
         result = serialize_order_status(partial_frame)
 
         assert result == {
-            "id": 99999,
+            "id": "99999",
             "symbol": "TSLA",
             "action": "SELL",
             "status": "PendingNew",
@@ -254,7 +256,10 @@ class TestSerializeOrderStatus:
         assert result["outsideRth"] is False
 
     def test_numeric_fields_preserved(self) -> None:
-        """Integer and float values are preserved with exact types."""
+        """Integer and float values are preserved with exact types.
+
+        Note: ``id`` is converted to string for JS precision safety.
+        """
         frame = MagicMock(
             spec=[
                 "id",
@@ -276,8 +281,8 @@ class TestSerializeOrderStatus:
 
         result = serialize_order_status(frame)
 
-        assert isinstance(result["id"], int)
-        assert result["id"] == 11111
+        assert isinstance(result["id"], str)
+        assert result["id"] == "11111"
         assert isinstance(result["totalQuantity"], int)
         assert result["totalQuantity"] == 500
         assert isinstance(result["filledQuantity"], int)
@@ -288,6 +293,28 @@ class TestSerializeOrderStatus:
         assert result["limitPrice"] == 100.00
         assert isinstance(result["stopPrice"], float)
         assert result["stopPrice"] == 98.50
+
+    def test_id_converted_to_string_for_js_precision(self) -> None:
+        """id must be a string to prevent JavaScript Number precision loss."""
+        large_id = 2**53 + 1  # exceeds JS Number.MAX_SAFE_INTEGER
+        frame = MagicMock(spec=["id"])
+        frame.id = large_id
+
+        result = serialize_order_status(frame)
+
+        assert isinstance(result["id"], str)
+        assert result["id"] == str(large_id)
+
+    def test_id_none_is_not_coerced_to_string_none(self) -> None:
+        """id=None must be preserved as None, not converted to the string 'None'."""
+        frame = MagicMock(spec=["id", "symbol"])
+        frame.id = None
+        frame.symbol = "AAPL"
+
+        result = serialize_order_status(frame)
+
+        assert result["id"] is None
+        assert result["symbol"] == "AAPL"
 
     def test_partial_fill_scenario(self) -> None:
         """Verify cumulative fill fields for a partially filled order."""
@@ -312,6 +339,7 @@ class TestSerializeOrderStatus:
 
         result = serialize_order_status(frame)
 
+        assert result["id"] == "55555"
         assert result["totalQuantity"] == 100
         assert result["filledQuantity"] == 40
         assert result["avgFillPrice"] == 175.25
@@ -332,9 +360,9 @@ class TestSerializeTransaction:
         """When the frame has all 17 recognized fields, all appear in result."""
         result = serialize_transaction(full_transaction_frame)
 
-        # Identity
-        assert result["id"] == 98765
-        assert result["orderId"] == 12345
+        # Identity (id and orderId are converted to strings for JS precision safety)
+        assert result["id"] == "98765"
+        assert result["orderId"] == "12345"
         assert result["account"] == "DU12345"
         assert result["symbol"] == "AAPL"
         assert result["identifier"] == "AAPL"
@@ -355,7 +383,7 @@ class TestSerializeTransaction:
         assert result["timestamp"] == 1700000060000
         # All 17 fields present
         assert len(result) == 17
-        assert len(result) == len(_TRANSACTION_FIELDS)
+        assert len(result) == len(TRANSACTION_FIELD_NAMES)
 
     def test_serialize_missing_fields_omitted(self) -> None:
         """Attributes not present on the frame are silently omitted."""
@@ -366,8 +394,8 @@ class TestSerializeTransaction:
 
         result = serialize_transaction(frame)
 
-        assert "id" in result
-        assert "orderId" in result
+        assert result["id"] == "1"
+        assert result["orderId"] == "2"
         assert "symbol" in result
         assert "account" not in result
         assert "action" not in result
@@ -385,7 +413,7 @@ class TestSerializeTransaction:
 
         result = serialize_transaction(frame)
 
-        assert result["id"] == 42
+        assert result["id"] == "42"
         assert result["symbol"] == "MSFT"
         assert result["action"] is None
         assert result["filledPrice"] is None
@@ -416,7 +444,11 @@ class TestSerializeTransaction:
         assert result["segType"] == ""
 
     def test_numeric_fields_preserved(self) -> None:
-        """Integer and float values are preserved with exact types."""
+        """Integer and float values are preserved with exact types.
+
+        Note: ``id`` and ``orderId`` are converted to strings for JS
+        precision safety.
+        """
         frame = MagicMock(
             spec=[
                 "id",
@@ -442,10 +474,10 @@ class TestSerializeTransaction:
 
         result = serialize_transaction(frame)
 
-        assert isinstance(result["id"], int)
-        assert result["id"] == 11111
-        assert isinstance(result["orderId"], int)
-        assert result["orderId"] == 22222
+        assert isinstance(result["id"], str)
+        assert result["id"] == "11111"
+        assert isinstance(result["orderId"], str)
+        assert result["orderId"] == "22222"
         assert isinstance(result["filledPrice"], float)
         assert result["filledPrice"] == 99.9999
         assert isinstance(result["filledQuantity"], int)
@@ -460,6 +492,33 @@ class TestSerializeTransaction:
         assert result["transactTime"] == 1700000060000
         assert isinstance(result["timestamp"], int)
         assert result["timestamp"] == 1700000060000
+
+    def test_id_fields_converted_to_string_for_js_precision(self) -> None:
+        """id and orderId must be strings to prevent JS Number precision loss."""
+        large_id = 2**53 + 1
+        frame = MagicMock(spec=["id", "orderId"])
+        frame.id = large_id
+        frame.orderId = large_id + 1
+
+        result = serialize_transaction(frame)
+
+        assert isinstance(result["id"], str)
+        assert result["id"] == str(large_id)
+        assert isinstance(result["orderId"], str)
+        assert result["orderId"] == str(large_id + 1)
+
+    def test_id_none_is_not_coerced_to_string_none(self) -> None:
+        """id=None and orderId=None must be preserved as None."""
+        frame = MagicMock(spec=["id", "orderId", "symbol"])
+        frame.id = None
+        frame.orderId = None
+        frame.symbol = "AAPL"
+
+        result = serialize_transaction(frame)
+
+        assert result["id"] is None
+        assert result["orderId"] is None
+        assert result["symbol"] == "AAPL"
 
     def test_result_is_json_serializable(
         self, full_transaction_frame: MagicMock
@@ -496,8 +555,8 @@ class TestSerializeTransaction:
 
         result = serialize_transaction(frame)
 
-        assert result["id"] == 90001
-        assert result["orderId"] == 55555
+        assert result["id"] == "90001"
+        assert result["orderId"] == "55555"
         assert result["symbol"] == "TSLA"
         assert result["action"] == "BUY"
         assert result["filledPrice"] == 242.75

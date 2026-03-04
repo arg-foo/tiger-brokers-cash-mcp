@@ -1,131 +1,555 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "tiger-events-order",
-  "title": "Tiger Brokers Order Status Event",
-  "description": "Schema for order status change events published to Redis streams via XADD. Field names match the OrderStatusData protobuf definition exactly (camelCase).",
-  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Full Redis stream event for order status changes.",
   "properties": {
     "account": {
-      "type": "string",
-      "description": "Tiger Brokers account identifier."
+      "description": "Tiger Brokers account identifier.",
+      "title": "Account",
+      "type": "string"
     },
     "timestamp": {
-      "type": "string",
-      "description": "Event timestamp from Tiger Brokers (epoch milliseconds as string)."
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Event timestamp from Tiger Brokers (epoch milliseconds as string).",
+      "title": "Timestamp"
     },
     "received_at": {
-      "type": "string",
+      "description": "ISO 8601 timestamp when the event was received by the subscriber.",
       "format": "date-time",
-      "description": "ISO 8601 timestamp when the event was received by the subscriber."
+      "title": "Received At",
+      "type": "string"
     },
     "payload": {
-      "type": "string",
-      "description": "JSON-encoded order status payload.",
       "contentMediaType": "application/json",
       "contentSchema": {
-        "type": "object",
+        "description": "Payload for order status change events.\n\nFields mirror the ``OrderStatusData`` protobuf exactly (camelCase).\nAll fields are optional because protobuf objects may omit any attribute.",
         "properties": {
           "id": {
-            "type": "integer",
-            "description": "Tiger Brokers internal order ID."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
           },
           "account": {
-            "type": "string",
-            "description": "Account identifier."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           },
           "symbol": {
-            "type": "string",
-            "description": "Ticker symbol (e.g. AAPL)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol"
           },
           "identifier": {
-            "type": "string",
-            "description": "Full contract identifier."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identifier"
           },
           "name": {
-            "type": "string",
-            "description": "Security name (e.g. Apple Inc)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
           },
           "secType": {
-            "type": "string",
-            "enum": ["STK", "OPT", "WAR", "IOPT", "CASH", "FUT", "FOP"],
-            "description": "Security type."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sectype"
           },
           "market": {
-            "type": "string",
-            "description": "Market code (e.g. US, HK)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Market"
           },
           "currency": {
-            "type": "string",
-            "description": "Currency code (e.g. USD)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "multiplier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Multiplier"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expiry"
+          },
+          "strike": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Strike"
+          },
+          "right": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Right"
           },
           "action": {
-            "type": "string",
-            "enum": ["BUY", "SELL"],
-            "description": "Order action."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action"
           },
           "orderType": {
-            "type": "string",
-            "description": "Order type (e.g. LMT, MKT, STP, STP_LMT)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ordertype"
           },
           "timeInForce": {
-            "type": "string",
-            "description": "Time in force (e.g. DAY, GTC)."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timeinforce"
           },
-          "status": {
-            "type": "string",
-            "description": "Order status (e.g. FILLED, PARTIALLY_FILLED, CANCELLED)."
-          },
-          "totalQuantity": {
-            "type": "integer",
-            "description": "Total order quantity."
-          },
-          "filledQuantity": {
-            "type": "integer",
-            "description": "Cumulative filled quantity across all executions."
-          },
-          "avgFillPrice": {
-            "type": "number",
-            "description": "Average fill price across all executions."
-          },
-          "limitPrice": {
-            "type": "number",
-            "description": "Limit price if applicable."
-          },
-          "stopPrice": {
-            "type": "number",
-            "description": "Stop price if applicable."
-          },
-          "totalCashAmount": {
-            "type": "number",
-            "description": "Total cash amount for by-amount orders."
-          },
-          "filledCashAmount": {
-            "type": "number",
-            "description": "Filled cash amount."
-          },
-          "commissionAndFee": {
-            "type": "number",
-            "description": "Commission and fee."
-          },
-          "realizedPnl": {
-            "type": "number",
-            "description": "Realized profit and loss."
+          "isLong": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Islong"
           },
           "outsideRth": {
-            "type": "boolean",
-            "description": "Whether the order can execute outside regular trading hours."
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outsiderth"
+          },
+          "totalQuantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Totalquantity"
+          },
+          "totalQuantityScale": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Totalquantityscale"
+          },
+          "limitPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Limitprice"
+          },
+          "stopPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stopprice"
+          },
+          "totalCashAmount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Totalcashamount"
+          },
+          "filledQuantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filledquantity"
+          },
+          "filledQuantityScale": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filledquantityscale"
+          },
+          "avgFillPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Avgfillprice"
+          },
+          "filledCashAmount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filledcashamount"
+          },
+          "commissionAndFee": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Commissionandfee"
+          },
+          "realizedPnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Realizedpnl"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "replaceStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replacestatus"
+          },
+          "cancelStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cancelstatus"
+          },
+          "canModify": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Canmodify"
+          },
+          "canCancel": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cancancel"
+          },
+          "liquidation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Liquidation"
+          },
+          "errorMsg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Errormsg"
           },
           "openTime": {
-            "type": "integer",
-            "description": "Order open time (epoch milliseconds)."
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Opentime"
           },
           "timestamp": {
-            "type": "integer",
-            "description": "Last update timestamp (epoch milliseconds)."
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timestamp"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "userMark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Usermark"
+          },
+          "segType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Segtype"
+          },
+          "attrDesc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Attrdesc"
+          },
+          "gst": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gst"
           }
-        }
-      }
+        },
+        "title": "OrderStatusPayload",
+        "type": "object"
+      },
+      "description": "JSON-encoded order status payload.",
+      "title": "Payload",
+      "type": "string"
     }
   },
-  "required": ["account", "received_at", "payload"]
+  "required": [
+    "account",
+    "received_at",
+    "payload"
+  ],
+  "title": "OrderStatusEvent",
+  "type": "object"
 }

@@ -4,88 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from tiger_mcp.events.models import (
+    ORDER_STATUS_FIELD_NAMES,
+    ORDER_STATUS_STR_FIELDS,
+    TRANSACTION_FIELD_NAMES,
+    TRANSACTION_STR_FIELDS,
+)
+
 _MISSING = object()
-
-# Fields to extract from OrderStatusData protobuf.
-# Uses the exact camelCase names from the protobuf definition.
-_ORDER_STATUS_FIELDS: tuple[str, ...] = (
-    # Identity
-    "id",
-    "account",
-    "symbol",
-    "identifier",
-    "name",
-    # Contract details
-    "secType",
-    "market",
-    "currency",
-    "multiplier",
-    "expiry",
-    "strike",
-    "right",
-    # Order parameters
-    "action",
-    "orderType",
-    "timeInForce",
-    "isLong",
-    "outsideRth",
-    "totalQuantity",
-    "totalQuantityScale",
-    "limitPrice",
-    "stopPrice",
-    "totalCashAmount",
-    # Fill data
-    "filledQuantity",
-    "filledQuantityScale",
-    "avgFillPrice",
-    "filledCashAmount",
-    "commissionAndFee",
-    "realizedPnl",
-    # Status
-    "status",
-    "replaceStatus",
-    "cancelStatus",
-    "canModify",
-    "canCancel",
-    "liquidation",
-    "errorMsg",
-    # Timestamps
-    "openTime",
-    "timestamp",
-    # Metadata
-    "source",
-    "userMark",
-    "segType",
-    "attrDesc",
-    "gst",
-)
-
-
-# Fields to extract from OrderTransactionData protobuf.
-# Uses the exact camelCase names from the protobuf definition.
-_TRANSACTION_FIELDS: tuple[str, ...] = (
-    # Identity
-    "id",
-    "orderId",
-    "account",
-    "symbol",
-    "identifier",
-    # Contract details
-    "multiplier",
-    "action",
-    "market",
-    "currency",
-    "segType",
-    "secType",
-    # Fill data
-    "filledPrice",
-    "filledQuantity",
-    # Timestamps
-    "createTime",
-    "updateTime",
-    "transactTime",
-    "timestamp",
-)
 
 
 def serialize_order_status(frame: Any) -> dict[str, Any]:
@@ -98,6 +24,9 @@ def serialize_order_status(frame: Any) -> dict[str, Any]:
     Fields with falsy values (``0``, ``0.0``, ``False``, ``""``) are
     preserved — only truly missing attributes are omitted.
 
+    The ``id`` field is converted to a string to prevent JSON integer
+    precision loss in JavaScript-based consumers.
+
     Parameters
     ----------
     frame:
@@ -109,9 +38,11 @@ def serialize_order_status(frame: Any) -> dict[str, Any]:
         A plain dict with all present fields extracted from the frame.
     """
     result: dict[str, Any] = {}
-    for attr in _ORDER_STATUS_FIELDS:
+    for attr in ORDER_STATUS_FIELD_NAMES:
         val = getattr(frame, attr, _MISSING)
         if val is not _MISSING:
+            if attr in ORDER_STATUS_STR_FIELDS and val is not None:
+                val = str(val)
             result[attr] = val
     return result
 
@@ -126,6 +57,9 @@ def serialize_transaction(frame: Any) -> dict[str, Any]:
     Fields with falsy values (``0``, ``0.0``, ``False``, ``""``) are
     preserved — only truly missing attributes are omitted.
 
+    The ``id`` and ``orderId`` fields are converted to strings to prevent
+    JSON integer precision loss in JavaScript-based consumers.
+
     Parameters
     ----------
     frame:
@@ -137,8 +71,10 @@ def serialize_transaction(frame: Any) -> dict[str, Any]:
         A plain dict with all present fields extracted from the frame.
     """
     result: dict[str, Any] = {}
-    for attr in _TRANSACTION_FIELDS:
+    for attr in TRANSACTION_FIELD_NAMES:
         val = getattr(frame, attr, _MISSING)
         if val is not _MISSING:
+            if attr in TRANSACTION_STR_FIELDS and val is not None:
+                val = str(val)
             result[attr] = val
     return result
