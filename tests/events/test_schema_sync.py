@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from tiger_mcp.events.models import (
     OrderStatusEvent,
@@ -86,4 +87,130 @@ class TestFieldCountSanity:
         assert len(TransactionPayload.model_fields) == 17, (
             f"Expected 17 fields, got {len(TransactionPayload.model_fields)}. "
             "Verify against OrderTransactionData protobuf and update the model."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Typed payload verification
+# ---------------------------------------------------------------------------
+
+
+class TestTypedPayload:
+    """Verify envelope models use typed Pydantic payload fields (not str)."""
+
+    # -- Round-trip construction ----------------------------------------
+
+    def test_order_status_event_round_trip(self) -> None:
+        """OrderStatusEvent accepts an OrderStatusPayload object and exposes its fields."""
+        payload = OrderStatusPayload(
+            id="123",
+            account="DU001",
+            symbol="AAPL",
+            status="Filled",
+            filledQuantity=100,
+            avgFillPrice=174.50,
+        )
+        event = OrderStatusEvent(
+            account="DU001",
+            timestamp="1700000000000",
+            received_at="2024-01-01T00:00:00Z",
+            payload=payload,
+        )
+
+        assert isinstance(event.payload, OrderStatusPayload)
+        assert event.payload.id == "123"
+        assert event.payload.symbol == "AAPL"
+        assert event.payload.status == "Filled"
+        assert event.payload.filledQuantity == 100
+        assert event.payload.avgFillPrice == 174.50
+
+    def test_transaction_event_round_trip(self) -> None:
+        """TransactionEvent accepts a TransactionPayload object and exposes its fields."""
+        payload = TransactionPayload(
+            id="456",
+            orderId="789",
+            account="DU001",
+            symbol="TSLA",
+            filledPrice=250.00,
+            filledQuantity=50,
+        )
+        event = TransactionEvent(
+            account="DU001",
+            timestamp="1700000000000",
+            received_at="2024-01-01T00:00:00Z",
+            payload=payload,
+        )
+
+        assert isinstance(event.payload, TransactionPayload)
+        assert event.payload.id == "456"
+        assert event.payload.orderId == "789"
+        assert event.payload.symbol == "TSLA"
+        assert event.payload.filledPrice == 250.00
+        assert event.payload.filledQuantity == 50
+
+    # -- Schema uses $ref / $defs --------------------------------------
+
+    @pytest.mark.parametrize(
+        ("model", "payload_model_name"),
+        [
+            (OrderStatusEvent, "OrderStatusPayload"),
+            (TransactionEvent, "TransactionPayload"),
+        ],
+        ids=["order", "transaction"],
+    )
+    def test_schema_contains_defs_with_payload_model(
+        self, model: type, payload_model_name: str
+    ) -> None:
+        """JSON schema must use $defs to define the payload model."""
+        schema = model.model_json_schema()
+
+        assert "$defs" in schema, (
+            f"{model.__name__} schema is missing '$defs'. "
+            "Payload should be a typed Pydantic model, not a plain str."
+        )
+        assert payload_model_name in schema["$defs"], (
+            f"'$defs' does not contain '{payload_model_name}'. "
+            f"Found: {list(schema['$defs'].keys())}"
+        )
+
+    @pytest.mark.parametrize(
+        ("model",),
+        [
+            (OrderStatusEvent,),
+            (TransactionEvent,),
+        ],
+        ids=["order", "transaction"],
+    )
+    def test_schema_payload_property_uses_ref(self, model: type) -> None:
+        """The payload property in the JSON schema must use $ref."""
+        schema = model.model_json_schema()
+        payload_prop = schema["properties"]["payload"]
+
+        # Pydantic may wrap the $ref in an allOf; accept either form.
+        has_direct_ref = "$ref" in payload_prop
+        has_allof_ref = any(
+            "$ref" in item
+            for item in payload_prop.get("allOf", [])
+        )
+
+        assert has_direct_ref or has_allof_ref, (
+            f"{model.__name__} payload property does not use '$ref'. "
+            f"Got: {payload_prop}"
+        )
+
+    # -- Required payload field ----------------------------------------
+
+    def test_order_status_event_requires_payload(self) -> None:
+        """Constructing OrderStatusEvent without payload must raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            OrderStatusEvent(
+                account="DU001",
+                received_at="2024-01-01T00:00:00Z",
+            )
+
+        errors = exc_info.value.errors()
+        payload_errors = [e for e in errors if "payload" in e["loc"]]
+        assert payload_errors, (
+            "Expected a validation error for missing 'payload' field. "
+            f"Got errors: {errors}"
         )

@@ -131,12 +131,8 @@ class OrderStatusEvent(BaseModel):
         description="ISO 8601 timestamp when the event was received by the subscriber.",
         json_schema_extra={"format": "date-time"},
     )
-    payload: str = Field(
-        description="JSON-encoded order status payload.",
-        json_schema_extra={
-            "contentMediaType": "application/json",
-            "contentSchema": OrderStatusPayload.model_json_schema(),
-        },
+    payload: OrderStatusPayload = Field(
+        description="Order status payload.",
     )
 
 
@@ -160,12 +156,8 @@ class TransactionEvent(BaseModel):
         description="ISO 8601 timestamp when the event was received by the subscriber.",
         json_schema_extra={"format": "date-time"},
     )
-    payload: str = Field(
-        description="JSON-encoded transaction payload.",
-        json_schema_extra={
-            "contentMediaType": "application/json",
-            "contentSchema": TransactionPayload.model_json_schema(),
-        },
+    payload: TransactionPayload = Field(
+        description="Transaction payload.",
     )
 
 
