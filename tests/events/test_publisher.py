@@ -2,18 +2,19 @@
 
 Covers: connection lifecycle, publish with XADD, error handling,
 consecutive failure tracking with escalating log severity,
-orjson serialization, and is_connected property.
+single JSON field serialization via envelope models, and is_connected property.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from unittest.mock import MagicMock, patch
 
-import orjson
 import pytest
 import redis
 
+from tiger_mcp.events.models import OrderStatusEvent, TransactionEvent
 from tiger_mcp.events.publisher import RedisStreamPublisher
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,17 @@ def connected_publisher(
     ):
         publisher.connect()
     return publisher
+
+
+def _make_order_event(**overrides: object) -> OrderStatusEvent:
+    """Create a minimal valid OrderStatusEvent for testing."""
+    defaults = {
+        "account": "DU12345",
+        "received_at": "2024-01-15T10:30:00+00:00",
+        "payload": {},
+    }
+    defaults.update(overrides)
+    return OrderStatusEvent(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +144,8 @@ class TestConnection:
         ):
             with pytest.raises(redis.ConnectionError, match="refused"):
                 publisher.connect()
-        # Client was assigned but ping failed — still appears connected
-        # because _redis was set before ping. This is the current behavior.
-        # The caller is responsible for handling the exception.
+        # _redis is only assigned after ping() succeeds. Since ping()
+        # raised, _redis remains None and is_connected returns False.
 
     def test_is_connected_false_after_failed_ping(
         self, publisher: RedisStreamPublisher
@@ -169,14 +180,12 @@ class TestPublish:
         connected_publisher: RedisStreamPublisher,
         mock_redis_client: MagicMock,
     ) -> None:
-        """publish() should call XADD with correct stream key, fields, maxlen."""
-        payload = {"status": "FILLED", "price": 150.0}
-        connected_publisher.publish(
-            event_type="order",
-            payload=payload,
-            account="DU12345",
+        """publish() should call XADD with correct stream key and single data field."""
+        event = _make_order_event(
+            payload={"status": "FILLED", "symbol": "AAPL"},
             timestamp="2024-01-15T10:30:00Z",
         )
+        connected_publisher.publish("order", event)
 
         mock_redis_client.xadd.assert_called_once()
         call_args = mock_redis_client.xadd.call_args
@@ -184,10 +193,14 @@ class TestPublish:
         # Positional args: stream_key, fields
         assert call_args[0][0] == f"{STREAM_PREFIX}:order"
         fields = call_args[0][1]
-        assert fields["account"] == "DU12345"
-        assert fields["timestamp"] == "2024-01-15T10:30:00Z"
-        assert "received_at" in fields
-        assert "payload" in fields
+        # Should be a single "data" field containing serialized JSON
+        assert "data" in fields
+        assert len(fields) == 1
+        # Verify the JSON content is valid and contains expected data
+        data = json.loads(fields["data"])
+        assert data["account"] == "DU12345"
+        assert data["payload"]["status"] == "FILLED"
+        assert data["payload"]["symbol"] == "AAPL"
 
         # Keyword args
         assert call_args[1]["maxlen"] == MAXLEN
@@ -201,10 +214,8 @@ class TestPublish:
         """publish() should return the entry ID from XADD."""
         mock_redis_client.xadd.return_value = "9999999999-5"
 
-        entry_id = connected_publisher.publish(
-            event_type="order",
-            payload={"status": "FILLED"},
-        )
+        event = _make_order_event(payload={"status": "FILLED"})
+        entry_id = connected_publisher.publish("order", event)
 
         assert entry_id == "9999999999-5"
 
@@ -212,73 +223,83 @@ class TestPublish:
         self, publisher: RedisStreamPublisher
     ) -> None:
         """publish() before connect() should return None without error."""
-        result = publisher.publish(
-            event_type="order",
-            payload={"status": "FILLED"},
-        )
+        event = _make_order_event(payload={"status": "FILLED"})
+        result = publisher.publish("order", event)
         assert result is None
 
-    def test_publish_serializes_payload_with_orjson(
+    def test_publish_serializes_event_as_single_json_field(
         self,
         connected_publisher: RedisStreamPublisher,
         mock_redis_client: MagicMock,
     ) -> None:
-        """publish() should serialize the payload dict using orjson."""
-        payload = {"symbol": "AAPL", "quantity": 100, "price": 150.50}
-        connected_publisher.publish(
-            event_type="order",
-            payload=payload,
+        """publish() should serialize the entire event as a single JSON data field."""
+        event = _make_order_event(
+            payload={"symbol": "AAPL", "totalQuantity": 100, "limitPrice": 150.50},
         )
+        connected_publisher.publish("order", event)
 
         fields = mock_redis_client.xadd.call_args[0][1]
-        expected_json = orjson.dumps(payload).decode()
-        assert fields["payload"] == expected_json
+        assert list(fields.keys()) == ["data"]
+        data = json.loads(fields["data"])
+        assert data["payload"]["symbol"] == "AAPL"
+        assert data["payload"]["totalQuantity"] == 100
+        assert data["payload"]["limitPrice"] == 150.50
 
-    def test_publish_default_account_and_timestamp(
+    def test_publish_uses_exclude_unset(
         self,
         connected_publisher: RedisStreamPublisher,
         mock_redis_client: MagicMock,
     ) -> None:
-        """publish() with default account/timestamp should use empty strings."""
-        connected_publisher.publish(
-            event_type="order",
-            payload={"status": "NEW"},
+        """publish() should use exclude_unset=True so unset payload fields are omitted."""
+        event = _make_order_event(
+            payload={"status": "FILLED"},
         )
+        connected_publisher.publish("order", event)
 
         fields = mock_redis_client.xadd.call_args[0][1]
-        assert fields["account"] == ""
-        assert fields["timestamp"] == ""
+        data = json.loads(fields["data"])
+        payload = data["payload"]
+        # Only "status" was set, so other fields should not appear
+        assert "status" in payload
+        assert "symbol" not in payload
+        assert "id" not in payload
 
     def test_publish_uses_provided_received_at(
         self,
         connected_publisher: RedisStreamPublisher,
         mock_redis_client: MagicMock,
     ) -> None:
-        """publish() should use the provided received_at timestamp."""
-        connected_publisher.publish(
-            event_type="order",
-            payload={"status": "FILLED"},
+        """publish() should include the received_at from the event model."""
+        event = _make_order_event(
             received_at="2024-01-15T10:30:00+00:00",
+            payload={"status": "FILLED"},
         )
+        connected_publisher.publish("order", event)
 
         fields = mock_redis_client.xadd.call_args[0][1]
-        assert fields["received_at"] == "2024-01-15T10:30:00+00:00"
+        data = json.loads(fields["data"])
+        assert data["received_at"] == "2024-01-15T10:30:00+00:00"
 
-    def test_publish_falls_back_to_now_when_no_received_at(
+    def test_publish_transaction_event(
         self,
         connected_publisher: RedisStreamPublisher,
         mock_redis_client: MagicMock,
     ) -> None:
-        """publish() without received_at should use datetime.now(UTC)."""
-        connected_publisher.publish(
-            event_type="order",
-            payload={"status": "NEW"},
+        """publish() should handle TransactionEvent the same as OrderStatusEvent."""
+        event = TransactionEvent(
+            account="DU12345",
+            received_at="2024-01-15T10:30:00+00:00",
+            payload={"filledPrice": 175.50},
         )
+        result = connected_publisher.publish("transaction", event)
 
-        fields = mock_redis_client.xadd.call_args[0][1]
-        # received_at should be a non-empty ISO timestamp
-        assert fields["received_at"] != ""
-        assert "T" in fields["received_at"]
+        assert result is not None
+        call_args = mock_redis_client.xadd.call_args
+        assert call_args[0][0] == "tiger:events:transaction"
+        fields = call_args[0][1]
+        assert "data" in fields
+        data = json.loads(fields["data"])
+        assert data["payload"]["filledPrice"] == 175.50
 
 
 # ---------------------------------------------------------------------------
@@ -299,10 +320,8 @@ class TestPublishErrors:
             "Connection lost"
         )
 
-        result = connected_publisher.publish(
-            event_type="order",
-            payload={"status": "FILLED"},
-        )
+        event = _make_order_event(payload={"status": "FILLED"})
+        result = connected_publisher.publish("order", event)
 
         assert result is None
 
@@ -316,29 +335,10 @@ class TestPublishErrors:
             "Timed out"
         )
 
-        result = connected_publisher.publish(
-            event_type="order",
-            payload={"status": "FILLED"},
-        )
+        event = _make_order_event(payload={"status": "FILLED"})
+        result = connected_publisher.publish("order", event)
 
         assert result is None
-
-    def test_publish_non_serializable_payload_raises(
-        self,
-        connected_publisher: RedisStreamPublisher,
-        mock_redis_client: MagicMock,
-    ) -> None:
-        """Non-serializable payload should raise (not caught by publish).
-
-        orjson.JSONEncodeError is not in the except clause, so it
-        propagates to the caller (_on_order_changed catches it).
-        """
-        non_serializable = {"obj": object()}
-        with pytest.raises(TypeError):
-            connected_publisher.publish(
-                event_type="order",
-                payload=non_serializable,
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -356,14 +356,15 @@ class TestConsecutiveFailures:
     ) -> None:
         """Each failed publish should increment the consecutive failure counter."""
         mock_redis_client.xadd.side_effect = redis.ConnectionError("fail")
+        event = _make_order_event()
 
-        connected_publisher.publish(event_type="order", payload={})
+        connected_publisher.publish("order", event)
         assert connected_publisher._consecutive_failures == 1
 
-        connected_publisher.publish(event_type="order", payload={})
+        connected_publisher.publish("order", event)
         assert connected_publisher._consecutive_failures == 2
 
-        connected_publisher.publish(event_type="order", payload={})
+        connected_publisher.publish("order", event)
         assert connected_publisher._consecutive_failures == 3
 
     def test_consecutive_failure_counter_resets_on_success(
@@ -372,16 +373,18 @@ class TestConsecutiveFailures:
         mock_redis_client: MagicMock,
     ) -> None:
         """A successful publish should reset the consecutive failure counter to 0."""
+        event = _make_order_event()
+
         # First, cause some failures
         mock_redis_client.xadd.side_effect = redis.ConnectionError("fail")
-        connected_publisher.publish(event_type="order", payload={})
-        connected_publisher.publish(event_type="order", payload={})
+        connected_publisher.publish("order", event)
+        connected_publisher.publish("order", event)
         assert connected_publisher._consecutive_failures == 2
 
         # Now succeed
         mock_redis_client.xadd.side_effect = None
         mock_redis_client.xadd.return_value = "123-0"
-        connected_publisher.publish(event_type="order", payload={})
+        connected_publisher.publish("order", event)
         assert connected_publisher._consecutive_failures == 0
 
     def test_escalating_log_severity_warning_under_10(
@@ -392,9 +395,10 @@ class TestConsecutiveFailures:
     ) -> None:
         """Failures under 10 consecutive should log at WARNING level."""
         mock_redis_client.xadd.side_effect = redis.ConnectionError("fail")
+        event = _make_order_event()
 
         with caplog.at_level(logging.WARNING, logger="tiger_mcp.events.publisher"):
-            connected_publisher.publish(event_type="order", payload={})
+            connected_publisher.publish("order", event)
 
         assert connected_publisher._consecutive_failures == 1
         warning_records = [
@@ -412,17 +416,18 @@ class TestConsecutiveFailures:
     ) -> None:
         """At 10+ consecutive failures, should log at ERROR level."""
         mock_redis_client.xadd.side_effect = redis.ConnectionError("fail")
+        event = _make_order_event()
 
         # Fail 9 times first (these are warnings)
         for _ in range(9):
-            connected_publisher.publish(event_type="order", payload={})
+            connected_publisher.publish("order", event)
 
         assert connected_publisher._consecutive_failures == 9
 
         # The 10th failure should be ERROR
         with caplog.at_level(logging.WARNING, logger="tiger_mcp.events.publisher"):
             caplog.clear()
-            connected_publisher.publish(event_type="order", payload={})
+            connected_publisher.publish("order", event)
 
         assert connected_publisher._consecutive_failures == 10
         error_records = [
@@ -440,15 +445,16 @@ class TestConsecutiveFailures:
     ) -> None:
         """At 11+ consecutive failures, should still log at ERROR level."""
         mock_redis_client.xadd.side_effect = redis.ConnectionError("fail")
+        event = _make_order_event()
 
         # Fail 10 times first
         for _ in range(10):
-            connected_publisher.publish(event_type="order", payload={})
+            connected_publisher.publish("order", event)
 
         # The 11th failure should also be ERROR
         with caplog.at_level(logging.WARNING, logger="tiger_mcp.events.publisher"):
             caplog.clear()
-            connected_publisher.publish(event_type="order", payload={})
+            connected_publisher.publish("order", event)
 
         assert connected_publisher._consecutive_failures == 11
         error_records = [
