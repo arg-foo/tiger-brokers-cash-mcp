@@ -55,7 +55,7 @@ def _init_module(
 
 def _make_buy_order_detail(
     *,
-    order_id: int = 12345,
+    order_id: str = "12345",
     symbol: str = "AAPL",
     quantity: int = 100,
     limit_price: float = 150.0,
@@ -76,7 +76,7 @@ def _make_buy_order_detail(
 
 def _make_sell_order_detail(
     *,
-    order_id: int = 12345,
+    order_id: str = "12345",
     symbol: str = "AAPL",
     quantity: int = 100,
     limit_price: float = 150.0,
@@ -126,18 +126,16 @@ class TestModifyOrder:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
-        mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
+        mock_client.get_order_detail.assert_awaited_once_with(order_id="12345")
         mock_client.modify_order.assert_awaited_once_with(
-            order_id=12345, quantity=200, limit_price=None, stop_price=None
+            order_id="12345", quantity=200, limit_price=None, stop_price=None
         )
         assert "12345" in result
         assert "modified" in result.lower() or "Modified" in result
@@ -150,17 +148,15 @@ class TestModifyOrder:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=155.0
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", limit_price=155.0)
 
         mock_client.modify_order.assert_awaited_once_with(
-            order_id=12345, quantity=None, limit_price=155.0, stop_price=None
+            order_id="12345", quantity=None, limit_price=155.0, stop_price=None
         )
         assert "12345" in result
         assert "modified" in result.lower() or "Modified" in result
@@ -170,7 +166,7 @@ class TestModifyOrder:
         mock_client: AsyncMock,
     ) -> None:
         """modify_order with all params None should return an error message."""
-        result = await order_mgmt_mod.modify_order(order_id=12345)
+        result = await order_mgmt_mod.modify_order(order_id="12345")
 
         assert "error" in result.lower()
         # Should NOT have called the API since no modifications were requested
@@ -186,9 +182,7 @@ class TestModifyOrder:
             "get_order_detail failed: Order not found"
         )
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=99999, quantity=50
-        )
+        result = await order_mgmt_mod.modify_order(order_id="99999", quantity=50)
 
         assert "error" in result.lower()
         assert "99999" in result
@@ -201,13 +195,13 @@ class TestModifyOrder:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200, limit_price=155.0
+            order_id="12345", quantity=200, limit_price=155.0
         )
 
         assert "AAPL" in result
@@ -224,9 +218,7 @@ class TestModifyOrder:
             "modify_order failed: Network error"
         )
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         assert "error" in result.lower()
         assert "12345" in result
@@ -238,17 +230,17 @@ class TestModifyOrder:
         """modify_order should fetch account data when quantity increases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         _setup_account_and_positions(
-            mock_client, cash=50000.0, net_liquidation=100000.0,
+            mock_client,
+            cash=50000.0,
+            net_liquidation=100000.0,
         )
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should have fetched account data for safety checks
         mock_client.get_assets.assert_awaited_once()
@@ -261,14 +253,12 @@ class TestModifyOrder:
         """modify_order should skip safety checks when quantity decreases."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=50
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=50)
 
         # Should NOT have fetched account data
         mock_client.get_assets.assert_not_awaited()
@@ -284,12 +274,12 @@ class TestModifyOrder:
         # Cash is less than what the increased quantity would cost
         # 200 shares * $150 * 1.01 buffer = $30,300 but only $100 cash
         _setup_account_and_positions(
-            mock_client, cash=100.0, net_liquidation=100.0,
+            mock_client,
+            cash=100.0,
+            net_liquidation=100.0,
         )
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should block the modification due to safety error
         assert "blocked" in result.lower() or "error" in result.lower()
@@ -308,18 +298,17 @@ class TestModifyOrderFullSafetyChecks:
     ) -> None:
         """modify_order should run full safety checks when quantity increases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
-            quantity=100, limit_price=150.0,
+            quantity=100,
+            limit_price=150.0,
         )
         _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should have fetched account and positions
         mock_client.get_assets.assert_awaited_once()
@@ -332,18 +321,17 @@ class TestModifyOrderFullSafetyChecks:
     ) -> None:
         """modify_order should run safety checks when limit price increases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
-            quantity=100, limit_price=150.0,
+            quantity=100,
+            limit_price=150.0,
         )
         _setup_account_and_positions(mock_client)
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=200.0
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", limit_price=200.0)
 
         # Safety checks should have been triggered for price change on BUY
         mock_client.get_assets.assert_awaited_once()
@@ -360,13 +348,12 @@ class TestModifyOrderFullSafetyChecks:
         mock_config.max_order_value = 10_000.0  # 200 * $150 = $30,000 > $10,000
 
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
-            quantity=100, limit_price=150.0,
+            quantity=100,
+            limit_price=150.0,
         )
         _setup_account_and_positions(mock_client)
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should block - the order value of $30,000 exceeds limit of $10,000
         assert "blocked" in result.lower() or "error" in result.lower()
@@ -382,7 +369,8 @@ class TestModifyOrderFullSafetyChecks:
         mock_config.max_position_pct = 0.05  # 5%
 
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
-            quantity=100, limit_price=150.0,
+            quantity=100,
+            limit_price=150.0,
         )
         # Order value: 200 * 150 = $30,000 which is 3% of $1M
         # But limit is 5% so: $30,000 > 5% * $1M = $50,000? No.
@@ -394,14 +382,12 @@ class TestModifyOrderFullSafetyChecks:
             net_liquidation=100_000.0,
         )
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should succeed but include a warning
         assert "Modified" in result
@@ -417,14 +403,12 @@ class TestModifyOrderFullSafetyChecks:
             quantity=100,
         )
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         # Should NOT fetch account/positions for SELL orders
         mock_client.get_assets.assert_not_awaited()
@@ -437,17 +421,16 @@ class TestModifyOrderFullSafetyChecks:
     ) -> None:
         """modify_order should skip safety checks when limit price decreases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail(
-            quantity=100, limit_price=150.0,
+            quantity=100,
+            limit_price=150.0,
         )
         mock_client.modify_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "modified": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=100.0
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", limit_price=100.0)
 
         # Lowering price is not increasing risk; skip safety checks
         mock_client.get_assets.assert_not_awaited()
@@ -462,9 +445,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         mock_client.get_assets.side_effect = RuntimeError("Account fetch failed")
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         assert "error" in result.lower()
         mock_client.modify_order.assert_not_awaited()
@@ -483,9 +464,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_order_detail.return_value = _make_buy_order_detail()
         _setup_account_and_positions(mock_client)
 
-        result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
-        )
+        result = await order_mgmt_mod.modify_order(order_id="12345", quantity=200)
 
         assert "blocked" in result.lower() or "error" in result.lower()
         assert "loss" in result.lower() or "limit" in result.lower()
@@ -525,7 +504,7 @@ class TestCancelOrder:
     ) -> None:
         """cancel_order should return confirmation when successful."""
         mock_client.get_order_detail.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "symbol": "AAPL",
             "action": "BUY",
             "order_type": "limit",
@@ -535,15 +514,15 @@ class TestCancelOrder:
             "status": "NEW",
         }
         mock_client.cancel_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "cancelled": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
-        mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
-        mock_client.cancel_order.assert_awaited_once_with(order_id=12345)
+        mock_client.get_order_detail.assert_awaited_once_with(order_id="12345")
+        mock_client.cancel_order.assert_awaited_once_with(order_id="12345")
         assert "12345" in result
         assert "cancel" in result.lower()
 
@@ -553,7 +532,7 @@ class TestCancelOrder:
     ) -> None:
         """cancel_order response should include order symbol and details."""
         mock_client.get_order_detail.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "symbol": "AAPL",
             "action": "BUY",
             "order_type": "limit",
@@ -563,12 +542,12 @@ class TestCancelOrder:
             "status": "NEW",
         }
         mock_client.cancel_order.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "cancelled": True,
             "result": None,
         }
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "AAPL" in result
 
@@ -581,7 +560,7 @@ class TestCancelOrder:
             "cancel_order failed: Order already cancelled"
         )
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "error" in result.lower()
         assert "12345" in result
@@ -592,7 +571,7 @@ class TestCancelOrder:
     ) -> None:
         """cancel_order should return error when the cancel API call fails."""
         mock_client.get_order_detail.return_value = {
-            "order_id": 12345,
+            "order_id": "12345",
             "symbol": "AAPL",
             "action": "BUY",
             "order_type": "limit",
@@ -605,7 +584,7 @@ class TestCancelOrder:
             "cancel_order failed: Network error"
         )
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "error" in result.lower()
         assert "12345" in result
@@ -625,9 +604,9 @@ class TestCancelAllOrders:
     ) -> None:
         """cancel_all_orders should return count and IDs when orders are cancelled."""
         mock_client.cancel_all_orders.return_value = [
-            {"order_id": 111, "cancelled": True, "result": None},
-            {"order_id": 222, "cancelled": True, "result": None},
-            {"order_id": 333, "cancelled": True, "result": None},
+            {"order_id": "111", "cancelled": True, "result": None},
+            {"order_id": "222", "cancelled": True, "result": None},
+            {"order_id": "333", "cancelled": True, "result": None},
         ]
 
         result = await order_mgmt_mod.cancel_all_orders()

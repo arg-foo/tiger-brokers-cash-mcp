@@ -163,6 +163,11 @@ class TigerClient:
         """Store *value* in the cache with the current timestamp."""
         self._quote_cache[key] = (value, time.monotonic())
 
+    # Fields whose values should be converted to ``str`` when building
+    # order dicts so that order IDs are consistently strings throughout
+    # the application layer.
+    _ID_FIELDS: frozenset[str] = frozenset({"id", "order_id"})
+
     @staticmethod
     def _order_to_dict(order: Any) -> dict[str, Any]:
         """Convert a tigeropen Order object to a plain dict."""
@@ -185,7 +190,7 @@ class TigerClient:
         ):
             val = getattr(order, attr, None)
             if val is not None:
-                result[attr] = val
+                result[attr] = str(val) if attr in TigerClient._ID_FIELDS else val
         return result
 
     @staticmethod
@@ -280,9 +285,7 @@ class TigerClient:
                 kwargs["end_time"] = end_date
 
             orders = await self._run_sync(
-                functools.partial(
-                    self._trade_client.get_filled_orders, **kwargs
-                ),
+                functools.partial(self._trade_client.get_filled_orders, **kwargs),
             )
             if orders is None:
                 return []
@@ -313,9 +316,7 @@ class TigerClient:
             order = self._build_order(
                 symbol, action, quantity, order_type, limit_price, stop_price
             )
-            preview = await self._run_sync(
-                self._trade_client.preview_order, order
-            )
+            preview = await self._run_sync(self._trade_client.preview_order, order)
             if hasattr(preview, "__dict__"):
                 return vars(preview)
             return {"preview": preview}
@@ -334,7 +335,7 @@ class TigerClient:
     ) -> dict[str, Any]:
         """Place an order and return the order ID.
 
-        Returns a dict containing at minimum ``{"order_id": <int>}``.
+        Returns a dict containing at minimum ``{"order_id": <str>}``.
         """
         try:
             order = self._build_order(
@@ -342,7 +343,7 @@ class TigerClient:
             )
             await self._run_sync(self._trade_client.place_order, order)
             return {
-                "order_id": order.id,
+                "order_id": str(order.id),
                 "symbol": symbol,
                 "action": action,
                 "quantity": quantity,
@@ -354,7 +355,7 @@ class TigerClient:
 
     async def modify_order(
         self,
-        order_id: int,
+        order_id: str,
         quantity: int | None = None,
         limit_price: float | None = None,
         stop_price: float | None = None,
@@ -365,9 +366,7 @@ class TigerClient:
         """
         try:
             order = await self._run_sync(
-                functools.partial(
-                    self._trade_client.get_order, id=order_id
-                ),
+                functools.partial(self._trade_client.get_order, id=int(order_id)),
             )
             order.time_in_force = _TIME_IN_FORCE
 
@@ -380,22 +379,18 @@ class TigerClient:
                 kwargs["aux_price"] = stop_price
 
             result = await self._run_sync(
-                functools.partial(
-                    self._trade_client.modify_order, order, **kwargs
-                ),
+                functools.partial(self._trade_client.modify_order, order, **kwargs),
             )
             return {"order_id": order_id, "modified": True, "result": result}
         except Exception as exc:
             msg = f"modify_order failed: {exc}"
             raise RuntimeError(msg) from exc
 
-    async def cancel_order(self, order_id: int) -> dict[str, Any]:
+    async def cancel_order(self, order_id: str) -> dict[str, Any]:
         """Cancel a single order by its ID."""
         try:
             result = await self._run_sync(
-                functools.partial(
-                    self._trade_client.cancel_order, id=order_id
-                ),
+                functools.partial(self._trade_client.cancel_order, id=int(order_id)),
             )
             return {"order_id": order_id, "cancelled": True, "result": result}
         except Exception as exc:
@@ -420,13 +415,11 @@ class TigerClient:
             results: list[dict[str, Any]] = []
             for order in open_orders:
                 cancel_result = await self._run_sync(
-                    functools.partial(
-                        self._trade_client.cancel_order, id=order.id
-                    ),
+                    functools.partial(self._trade_client.cancel_order, id=order.id),
                 )
                 results.append(
                     {
-                        "order_id": order.id,
+                        "order_id": str(order.id),
                         "cancelled": True,
                         "result": cancel_result,
                     }
@@ -436,9 +429,7 @@ class TigerClient:
             msg = f"cancel_all_orders failed: {exc}"
             raise RuntimeError(msg) from exc
 
-    async def get_open_orders(
-        self, symbol: str | None = None
-    ) -> list[dict[str, Any]]:
+    async def get_open_orders(self, symbol: str | None = None) -> list[dict[str, Any]]:
         """Get all currently open orders, optionally filtered by symbol."""
         try:
             kwargs: dict[str, Any] = {"states": _OPEN_ORDER_STATES}
@@ -455,13 +446,11 @@ class TigerClient:
             msg = f"get_open_orders failed: {exc}"
             raise RuntimeError(msg) from exc
 
-    async def get_order_detail(self, order_id: int) -> dict[str, Any]:
+    async def get_order_detail(self, order_id: str) -> dict[str, Any]:
         """Get detailed information about a specific order."""
         try:
             order = await self._run_sync(
-                functools.partial(
-                    self._trade_client.get_order, id=order_id
-                ),
+                functools.partial(self._trade_client.get_order, id=int(order_id)),
             )
             return self._order_to_dict(order)
         except Exception as exc:

@@ -132,13 +132,13 @@ async def get_open_orders(symbol: str = "") -> str:
 
 
 @mcp.tool()
-async def get_order_detail(order_id: int) -> str:
+async def get_order_detail(order_id: str) -> str:
     """Retrieve full details for a single order.
 
     Parameters
     ----------
     order_id:
-        The numeric order identifier.
+        The order identifier.
 
     Returns
     -------
@@ -154,9 +154,6 @@ async def get_order_detail(order_id: int) -> str:
     try:
         detail = await _client.get_order_detail(order_id=order_id)
     except Exception as exc:
-        return (
-            f"Error: Could not retrieve order {order_id}. "
-            f"Details: {exc}"
-        )
+        return f"Error: Could not retrieve order {order_id}. Details: {exc}"
 
     return _format_order_detail(detail)

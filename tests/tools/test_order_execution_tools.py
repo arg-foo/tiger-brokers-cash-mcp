@@ -36,7 +36,7 @@ def mock_client() -> AsyncMock:
     }
     # Default place order
     client.place_order.return_value = {
-        "order_id": 12345,
+        "order_id": "12345",
         "symbol": "AAPL",
         "action": "BUY",
         "quantity": 100,
@@ -96,96 +96,166 @@ class TestValidateOrderParams:
 
     def test_valid_sell_limit_order(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "SELL", 50, "LMT", 150.0, None,
+            "AAPL",
+            "SELL",
+            50,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is None
 
     def test_valid_stop_limit_order(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 10, "STP_LMT", 150.0, 145.0,
+            "AAPL",
+            "BUY",
+            10,
+            "STP_LMT",
+            150.0,
+            145.0,
         )
         assert result is None
 
     def test_empty_symbol(self) -> None:
         result = execution_mod._validate_order_params(
-            "", "BUY", 100, "LMT", 150.0, None,
+            "",
+            "BUY",
+            100,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "symbol" in result.lower()
 
     def test_lowercase_symbol_rejected(self) -> None:
         result = execution_mod._validate_order_params(
-            "aapl", "BUY", 100, "LMT", 150.0, None,
+            "aapl",
+            "BUY",
+            100,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "uppercase" in result.lower()
 
     def test_invalid_action(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "SHORT", 100, "LMT", 150.0, None,
+            "AAPL",
+            "SHORT",
+            100,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "action" in result.lower()
 
     def test_negative_quantity(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", -10, "LMT", 150.0, None,
+            "AAPL",
+            "BUY",
+            -10,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "quantity" in result.lower()
 
     def test_zero_quantity(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 0, "LMT", 150.0, None,
+            "AAPL",
+            "BUY",
+            0,
+            "LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "quantity" in result.lower()
 
     def test_invalid_order_type(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "FOK", None, None,
+            "AAPL",
+            "BUY",
+            100,
+            "FOK",
+            None,
+            None,
         )
         assert result is not None
         assert "order_type" in result.lower()
 
     def test_market_order_type_rejected(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "MKT", None, None,
+            "AAPL",
+            "BUY",
+            100,
+            "MKT",
+            None,
+            None,
         )
         assert result is not None
         assert "order_type" in result.lower()
 
     def test_stop_order_type_rejected(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "STP", None, 145.0,
+            "AAPL",
+            "BUY",
+            100,
+            "STP",
+            None,
+            145.0,
         )
         assert result is not None
         assert "order_type" in result.lower()
 
     def test_trail_order_type_rejected(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "TRAIL", None, None,
+            "AAPL",
+            "BUY",
+            100,
+            "TRAIL",
+            None,
+            None,
         )
         assert result is not None
         assert "order_type" in result.lower()
 
     def test_limit_price_required_for_lmt(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "LMT", None, None,
+            "AAPL",
+            "BUY",
+            100,
+            "LMT",
+            None,
+            None,
         )
         assert result is not None
         assert "limit_price" in result.lower()
 
     def test_limit_price_required_for_stp_lmt(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "STP_LMT", None, 145.0,
+            "AAPL",
+            "BUY",
+            100,
+            "STP_LMT",
+            None,
+            145.0,
         )
         assert result is not None
         assert "limit_price" in result.lower()
 
     def test_stop_price_required_for_stp_lmt(self) -> None:
         result = execution_mod._validate_order_params(
-            "AAPL", "BUY", 100, "STP_LMT", 150.0, None,
+            "AAPL",
+            "BUY",
+            100,
+            "STP_LMT",
+            150.0,
+            None,
         )
         assert result is not None
         assert "stop_price" in result.lower()
@@ -209,7 +279,10 @@ class TestPreviewStockOrder:
         mock_safety.return_value = _safety_passed()
 
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -229,7 +302,10 @@ class TestPreviewStockOrder:
         )
 
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -250,7 +326,10 @@ class TestPreviewStockOrder:
         )
 
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -266,8 +345,11 @@ class TestPreviewStockOrder:
         mock_safety.return_value = _safety_passed()
 
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100,
-            order_type="LMT", limit_price=148.0,
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
+            limit_price=148.0,
         )
 
         assert isinstance(result, str)
@@ -279,7 +361,10 @@ class TestPreviewStockOrder:
     ) -> None:
         """Preview with invalid params returns error without calling API."""
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="SHORT", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="SHORT",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -294,7 +379,10 @@ class TestPreviewStockOrder:
         mock_client.get_assets.side_effect = RuntimeError("API connection failed")
 
         result = await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -310,7 +398,10 @@ class TestPreviewStockOrder:
         mock_safety.return_value = _safety_passed()
 
         await execution_mod.preview_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -341,7 +432,10 @@ class TestPlaceStockOrder:
         mock_safety.return_value = _safety_passed()
 
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -360,7 +454,10 @@ class TestPlaceStockOrder:
         )
 
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="SELL", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="SELL",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -374,14 +471,14 @@ class TestPlaceStockOrder:
         mock_client: AsyncMock,
     ) -> None:
         """Place order should proceed when only warnings exist (no errors)."""
-        dup_warn = (
-            "Duplicate order detected: "
-            "a similar order was submitted recently"
-        )
+        dup_warn = "Duplicate order detected: a similar order was submitted recently"
         mock_safety.return_value = _safety_passed(warnings=[dup_warn])
 
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -395,7 +492,10 @@ class TestPlaceStockOrder:
     ) -> None:
         """Place order with invalid params returns error without calling API."""
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=-10, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=-10,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -413,7 +513,10 @@ class TestPlaceStockOrder:
         mock_safety.return_value = _safety_passed()
 
         await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -435,7 +538,10 @@ class TestPlaceStockOrder:
         )
 
         await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -452,7 +558,10 @@ class TestPlaceStockOrder:
         mock_client.place_order.side_effect = RuntimeError("Order submission failed")
 
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
@@ -466,7 +575,10 @@ class TestPlaceStockOrder:
     ) -> None:
         """Place LMT order without limit_price should return validation error."""
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
         )
 
         assert "limit_price" in result.lower()
@@ -480,7 +592,10 @@ class TestPlaceStockOrder:
     ) -> None:
         """Place STP_LMT order without stop_price should return validation error."""
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="STP_LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="STP_LMT",
             limit_price=150.0,
         )
 
@@ -496,7 +611,7 @@ class TestPlaceStockOrder:
         """Successful place_stock_order should include order_id, status in result."""
         mock_safety.return_value = _safety_passed()
         mock_client.place_order.return_value = {
-            "order_id": 99999,
+            "order_id": "99999",
             "symbol": "TSLA",
             "action": "BUY",
             "quantity": 50,
@@ -504,8 +619,11 @@ class TestPlaceStockOrder:
         }
 
         result = await execution_mod.place_stock_order(
-            symbol="TSLA", action="BUY", quantity=50,
-            order_type="LMT", limit_price=200.0,
+            symbol="TSLA",
+            action="BUY",
+            quantity=50,
+            order_type="LMT",
+            limit_price=200.0,
         )
 
         assert "99999" in result
@@ -526,7 +644,10 @@ class TestPlaceStockOrder:
         )
 
         result = await execution_mod.place_stock_order(
-            symbol="AAPL", action="BUY", quantity=100, order_type="LMT",
+            symbol="AAPL",
+            action="BUY",
+            quantity=100,
+            order_type="LMT",
             limit_price=150.0,
         )
 
