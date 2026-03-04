@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from tiger_mcp.api.tiger_client import _parse_order_id
 from tiger_mcp.config import Settings
 
 # ---------------------------------------------------------------------------
@@ -796,3 +797,71 @@ class TestBuildOrder:
                 quantity=10,
                 order_type="trailing_stop",
             )
+
+
+# ---------------------------------------------------------------------------
+# _parse_order_id helper
+# ---------------------------------------------------------------------------
+
+
+class TestParseOrderId:
+    """Test the _parse_order_id module-level helper."""
+
+    def test_parse_order_id_valid(self) -> None:
+        """_parse_order_id should convert a valid numeric string to int."""
+        assert _parse_order_id("12345") == 12345
+
+    def test_parse_order_id_non_numeric(self) -> None:
+        """_parse_order_id should raise ValueError for non-numeric input."""
+        with pytest.raises(ValueError, match="numeric string"):
+            _parse_order_id("abc")
+
+    def test_parse_order_id_empty(self) -> None:
+        """_parse_order_id should raise ValueError for empty string."""
+        with pytest.raises(ValueError, match="numeric string"):
+            _parse_order_id("")
+
+    def test_parse_order_id_negative(self) -> None:
+        """_parse_order_id should raise ValueError for negative values."""
+        with pytest.raises(ValueError, match="positive integer"):
+            _parse_order_id("-1")
+
+
+# ---------------------------------------------------------------------------
+# _order_to_dict ID field conversion
+# ---------------------------------------------------------------------------
+
+
+class TestOrderToDictIdConversion:
+    """Test that _order_to_dict converts ID fields to str."""
+
+    def test_order_to_dict_converts_id_fields_to_str(self, tiger_client: Any) -> None:
+        """_order_to_dict should convert id and order_id to str."""
+        from tiger_mcp.api.tiger_client import TigerClient
+
+        mock_order = MagicMock()
+        mock_order.id = 99999
+        mock_order.order_id = 99999
+        mock_order.symbol = "AAPL"
+        for attr in (
+            "order_type",
+            "quantity",
+            "filled",
+            "avg_fill_price",
+            "limit_price",
+            "aux_price",
+            "status",
+            "remaining",
+            "trade_time",
+            "commission",
+            "action",
+        ):
+            setattr(mock_order, attr, None)
+
+        result = TigerClient._order_to_dict(mock_order)
+
+        assert result["id"] == "99999"
+        assert isinstance(result["id"], str)
+        assert result["order_id"] == "99999"
+        assert isinstance(result["order_id"], str)
+        assert result["symbol"] == "AAPL"  # non-ID field stays as-is

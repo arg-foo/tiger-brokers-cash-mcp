@@ -418,7 +418,7 @@ async def cancel_all_orders() -> str:
     if not results:
         return "No open orders to cancel."
 
-    order_ids = [str(r.get("order_id", "N/A")) for r in results]
+    order_ids = [r.get("order_id", "N/A") for r in results]
     count = len(results)
 
     lines = [

@@ -294,7 +294,6 @@ class TestModifyOrderFullSafetyChecks:
     async def test_safety_checks_run_on_quantity_increase_buy(
         self,
         mock_client: AsyncMock,
-        mock_state: MagicMock,
     ) -> None:
         """modify_order should run full safety checks when quantity increases on BUY."""
         mock_client.get_order_detail.return_value = _make_buy_order_detail(

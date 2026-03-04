@@ -62,6 +62,26 @@ _OPEN_ORDER_STATES = [
 ]
 
 
+def _parse_order_id(order_id: str) -> int:
+    """Convert a string order ID to int for SDK boundary calls.
+
+    Raises
+    ------
+    ValueError
+        If *order_id* is not a numeric string or represents a non-positive
+        integer.
+    """
+    try:
+        parsed = int(order_id)
+    except (ValueError, TypeError):
+        msg = f"order_id must be a numeric string, got: {order_id!r}"
+        raise ValueError(msg)
+    if parsed <= 0:
+        msg = f"order_id must be a positive integer, got: {parsed}"
+        raise ValueError(msg)
+    return parsed
+
+
 class TigerClient:
     """Async wrapper around the tigeropen Trade and Quote clients.
 
@@ -73,6 +93,11 @@ class TigerClient:
     config:
         A ``Settings`` instance providing credentials and runtime options.
     """
+
+    # Fields whose values should be converted to ``str`` when building
+    # order dicts so that order IDs are consistently strings throughout
+    # the application layer.
+    _ID_FIELDS: frozenset[str] = frozenset({"id", "order_id"})
 
     def __init__(self, config: Settings) -> None:
         client_config = build_client_config(config)
@@ -162,11 +187,6 @@ class TigerClient:
     def _set_cached(self, key: str, value: Any) -> None:
         """Store *value* in the cache with the current timestamp."""
         self._quote_cache[key] = (value, time.monotonic())
-
-    # Fields whose values should be converted to ``str`` when building
-    # order dicts so that order IDs are consistently strings throughout
-    # the application layer.
-    _ID_FIELDS: frozenset[str] = frozenset({"id", "order_id"})
 
     @staticmethod
     def _order_to_dict(order: Any) -> dict[str, Any]:
@@ -366,7 +386,9 @@ class TigerClient:
         """
         try:
             order = await self._run_sync(
-                functools.partial(self._trade_client.get_order, id=int(order_id)),
+                functools.partial(
+                    self._trade_client.get_order, id=_parse_order_id(order_id)
+                ),
             )
             order.time_in_force = _TIME_IN_FORCE
 
@@ -390,7 +412,9 @@ class TigerClient:
         """Cancel a single order by its ID."""
         try:
             result = await self._run_sync(
-                functools.partial(self._trade_client.cancel_order, id=int(order_id)),
+                functools.partial(
+                    self._trade_client.cancel_order, id=_parse_order_id(order_id)
+                ),
             )
             return {"order_id": order_id, "cancelled": True, "result": result}
         except Exception as exc:
@@ -450,7 +474,9 @@ class TigerClient:
         """Get detailed information about a specific order."""
         try:
             order = await self._run_sync(
-                functools.partial(self._trade_client.get_order, id=int(order_id)),
+                functools.partial(
+                    self._trade_client.get_order, id=_parse_order_id(order_id)
+                ),
             )
             return self._order_to_dict(order)
         except Exception as exc:
