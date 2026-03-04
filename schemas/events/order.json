@@ -26,8 +26,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
-            "description": "Tiger Brokers internal order ID."
+            "type": "string",
+            "description": "Tiger Brokers internal order ID (string to prevent JS integer precision loss)."
           },
           "account": {
             "type": "string",

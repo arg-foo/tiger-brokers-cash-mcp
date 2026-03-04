@@ -26,12 +26,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
-            "description": "Transaction ID."
+            "type": "string",
+            "description": "Transaction ID (string to prevent JS integer precision loss)."
           },
           "orderId": {
-            "type": "integer",
-            "description": "Associated order ID."
+            "type": "string",
+            "description": "Associated order ID (string to prevent JS integer precision loss)."
           },
           "account": {
             "type": "string",
