@@ -429,7 +429,9 @@ class TestBuildTransportSecurity:
         result = _build_transport_security(mock_settings)
 
         assert result.allowed_hosts == ["myhost.example.com:8080"]
-        assert result.allowed_origins == ["http://myhost.example.com:8080"]
+        assert "http://myhost.example.com:8080" in result.allowed_origins
+        assert "https://myhost.example.com:8080" in result.allowed_origins
+        assert result.enable_dns_rebinding_protection is True
 
     def test_auto_detect_for_0000(self) -> None:
         """For 0.0.0.0 without explicit hosts, derive localhost variants."""
@@ -445,6 +447,7 @@ class TestBuildTransportSecurity:
         assert "127.0.0.1:*" in result.allowed_hosts
         assert "[::1]:*" in result.allowed_hosts
         assert "http://localhost:*" in result.allowed_origins
+        assert "https://localhost:*" in result.allowed_origins
         assert "http://127.0.0.1:*" in result.allowed_origins
         assert "http://[::1]:*" in result.allowed_origins
 
@@ -501,7 +504,8 @@ class TestBuildTransportSecurity:
         result = _build_transport_security(mock_settings)
 
         assert result.allowed_hosts == ["api.example.com:*"]
-        assert result.allowed_origins == ["http://api.example.com:*"]
+        assert "http://api.example.com:*" in result.allowed_origins
+        assert "https://api.example.com:*" in result.allowed_origins
 
     def test_returns_transport_security_settings_type(self) -> None:
         """Return type must be TransportSecuritySettings."""
@@ -601,6 +605,8 @@ class TestTransportSecurityIntegration:
 
             ts = mcp.settings.transport_security
             assert ts.allowed_hosts == ["custom.host:8080"]
+            assert "http://custom.host:8080" in ts.allowed_origins
+            assert "https://custom.host:8080" in ts.allowed_origins
 
     async def test_stdio_transport_does_not_set_transport_security(
         self,
@@ -610,8 +616,8 @@ class TestTransportSecurityIntegration:
 
         mock_logger = MagicMock()
 
-        # Save original transport_security to restore after test
-        original_ts = mcp.settings.transport_security
+        # Use a known sentinel value so the assertion is not vacuous
+        sentinel_ts = None
 
         with (
             patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
@@ -627,10 +633,10 @@ class TestTransportSecurityIntegration:
             patch.object(
                 mcp, "run_stdio_async", return_value=None
             ),
-            patch.object(
-                mcp.settings, "transport_security", original_ts
-            ),
         ):
+            # Reset to sentinel before running main()
+            mcp.settings.transport_security = sentinel_ts
+
             mock_structlog.get_logger.return_value = mock_logger
             mock_settings = mock_from_env.return_value
             mock_settings.tiger_id = "test-id"
@@ -640,5 +646,5 @@ class TestTransportSecurityIntegration:
 
             await main()
 
-            # transport_security should remain the same (not overwritten)
-            assert mcp.settings.transport_security == original_ts
+            # transport_security should still be the sentinel (not overwritten)
+            assert mcp.settings.transport_security is sentinel_ts

@@ -105,6 +105,10 @@ def configure_logging() -> None:
 # DNS rebinding protection
 # ---------------------------------------------------------------------------
 
+# 0.0.0.0 is a bind-all address, not a true loopback, but when used as the
+# listen address with no explicit allowed hosts we default to loopback
+# variants so that local development works out-of-the-box.  For non-local
+# access, operators must set MCP_ALLOWED_HOSTS explicitly.
 _LOCALHOST_ALIASES = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
 
@@ -125,7 +129,10 @@ def _build_transport_security(
     else:
         allowed_hosts = [f"{settings.mcp_host}:*"]
 
-    allowed_origins = [f"http://{h}" for h in allowed_hosts]
+    allowed_origins = (
+        [f"http://{h}" for h in allowed_hosts]
+        + [f"https://{h}" for h in allowed_hosts]
+    )
 
     return TransportSecuritySettings(
         allowed_hosts=allowed_hosts,
@@ -212,6 +219,18 @@ async def main() -> None:
             mcp.settings.transport_security = _build_transport_security(
                 settings
             )
+            if (
+                settings.mcp_host == "0.0.0.0"
+                and not settings.mcp_allowed_hosts
+            ):
+                logger.warning(
+                    "dns_rebinding_loopback_only",
+                    msg=(
+                        "MCP_HOST is 0.0.0.0 with no MCP_ALLOWED_HOSTS; "
+                        "only loopback clients will be accepted. "
+                        "Set MCP_ALLOWED_HOSTS for external access."
+                    ),
+                )
             await mcp.run_streamable_http_async()
         else:
             await mcp.run_stdio_async()
