@@ -11,7 +11,9 @@ files under ``schemas/events/``.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import timedelta, timezone
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Inner payload models (protobuf field mirrors)
@@ -126,10 +128,17 @@ class _BaseEvent(BaseModel):
             " (epoch milliseconds as string)."
         ),
     )
-    received_at: str = Field(
+    received_at: AwareDatetime = Field(
         description="ISO 8601 timestamp when the event was received by the subscriber.",
-        json_schema_extra={"format": "date-time"},
     )
+
+    @field_validator("received_at")
+    @classmethod
+    def _normalize_received_at_to_utc(cls, v: AwareDatetime) -> AwareDatetime:
+        """Normalize received_at to UTC."""
+        if v.utcoffset() != timedelta(0):
+            return v.astimezone(timezone.utc)
+        return v
 
 
 class OrderStatusEvent(_BaseEvent):

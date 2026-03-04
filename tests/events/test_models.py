@@ -7,6 +7,10 @@ timestamp=None inclusion, and round-trip JSON serialization.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from pydantic import ValidationError
 
 from tiger_mcp.events.models import OrderStatusEvent, TransactionEvent
 
@@ -30,7 +34,7 @@ class TestModelDumpJsonSparsePayload:
         data = json.loads(event.model_dump_json(exclude_unset=True))
 
         assert data["account"] == "DU12345"
-        assert data["received_at"] == "2024-01-15T10:30:00+00:00"
+        assert data["received_at"] == "2024-01-15T10:30:00Z"
         # payload should only contain the fields we set
         payload = data["payload"]
         assert payload["status"] == "FILLED"
@@ -155,3 +159,50 @@ class TestRoundTripSerialization:
         restored = TransactionEvent.model_validate_json(json_str)
 
         assert restored == original
+
+
+# ---------------------------------------------------------------------------
+# received_at validation
+# ---------------------------------------------------------------------------
+
+
+class TestReceivedAtValidation:
+    """Test that received_at rejects invalid inputs."""
+
+    def test_rejects_naive_datetime(self) -> None:
+        with pytest.raises(ValidationError):
+            OrderStatusEvent(account="X", received_at=datetime(2024, 1, 1), payload={})
+
+    def test_rejects_none(self) -> None:
+        with pytest.raises(ValidationError):
+            OrderStatusEvent(account="X", received_at=None, payload={})
+
+    def test_rejects_non_datetime_string(self) -> None:
+        with pytest.raises(ValidationError):
+            OrderStatusEvent(account="X", received_at="not-a-date", payload={})
+
+    def test_normalizes_non_utc_to_utc(self) -> None:
+        """Non-UTC offset should be normalized to UTC."""
+        non_utc = datetime(2024, 1, 1, 5, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+        event = OrderStatusEvent(account="X", received_at=non_utc, payload={})
+        assert event.received_at.tzinfo == timezone.utc
+        assert event.received_at == datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# datetime-object construction (mirrors production usage)
+# ---------------------------------------------------------------------------
+
+
+class TestDatetimeObjectConstruction:
+    """Test that datetime objects work correctly for received_at (production path)."""
+
+    def test_order_event_with_datetime_received_at(self) -> None:
+        """Production passes datetime objects; verify serialization."""
+        event = OrderStatusEvent(
+            account="DU12345",
+            received_at=datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
+            payload={"status": "FILLED"},
+        )
+        data = json.loads(event.model_dump_json(exclude_unset=True))
+        assert data["received_at"] == "2024-01-15T10:30:00Z"

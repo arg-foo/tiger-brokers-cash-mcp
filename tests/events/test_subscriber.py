@@ -8,6 +8,7 @@ thread-safe reconnecting guard, and edge cases.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -284,8 +285,8 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """_on_order_changed should serialize the frame and publish an envelope model."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-01-15T10:30:00+00:00"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc,
         )
         mock_serialize.return_value = {"status": "FILLED", "symbol": "AAPL"}
         frame = MagicMock()
@@ -302,7 +303,9 @@ class TestOnOrderChanged:
         assert isinstance(event, OrderStatusEvent)
         assert event.account == "DU12345"
         assert event.timestamp == "1700000000"
-        assert event.received_at == "2024-01-15T10:30:00+00:00"
+        assert event.received_at == datetime(
+            2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc,
+        )
         assert event.payload.status == "FILLED"
         assert event.payload.symbol == "AAPL"
 
@@ -316,7 +319,9 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame has an account attribute, it should be used."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"status": "NEW"}
         frame = MagicMock()
         frame.account = "DU99999"
@@ -338,7 +343,9 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame.account is missing, fall back to settings.tiger_account."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"status": "CANCELLED"}
         frame = MagicMock(spec=[])  # spec=[] means no attributes at all
 
@@ -358,7 +365,9 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """Empty frame.account falls back to settings.tiger_account."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"status": "CANCELLED"}
         frame = MagicMock()
         frame.account = ""
@@ -404,7 +413,9 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame.timestamp is missing, None should be passed."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"status": "FILLED"}
         frame = MagicMock(spec=[])  # No attributes
 
@@ -424,9 +435,10 @@ class TestOnOrderChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """received_at should be set at callback invocation time."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-06-01T12:00:00+00:00"
-        )
+        def _now(tz):
+            assert tz is UTC, f"Expected UTC, got {tz}"
+            return datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.side_effect = _now
         mock_serialize.return_value = {"status": "FILLED"}
         frame = MagicMock()
         frame.account = "DU12345"
@@ -436,7 +448,9 @@ class TestOnOrderChanged:
 
         call_args = mock_publisher.publish.call_args
         event = call_args[0][1]
-        assert event.received_at == "2024-06-01T12:00:00+00:00"
+        assert event.received_at == datetime(
+            2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -457,8 +471,8 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """_on_transaction_changed should serialize the frame and publish an envelope model."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-01-15T10:30:00+00:00"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc,
         )
         mock_serialize.return_value = {"filledPrice": 175.50, "symbol": "AAPL"}
         frame = MagicMock()
@@ -474,7 +488,9 @@ class TestOnTransactionChanged:
         assert isinstance(event, TransactionEvent)
         assert event.account == "DU12345"
         assert event.timestamp == "1700000000"
-        assert event.received_at == "2024-01-15T10:30:00+00:00"
+        assert event.received_at == datetime(
+            2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc,
+        )
         assert event.payload.filledPrice == 175.50
         assert event.payload.symbol == "AAPL"
 
@@ -488,7 +504,9 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame has an account attribute, it should be used."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"filledPrice": 100.0}
         frame = MagicMock()
         frame.account = "DU99999"
@@ -510,7 +528,9 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame.account is missing, fall back to settings.tiger_account."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"filledPrice": 200.0}
         frame = MagicMock(spec=[])  # spec=[] means no attributes at all
 
@@ -530,7 +550,9 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """Empty frame.account falls back to settings.tiger_account."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"filledPrice": 200.0}
         frame = MagicMock()
         frame.account = ""
@@ -576,9 +598,10 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """received_at should be set at callback invocation time."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-06-01T12:00:00+00:00"
-        )
+        def _now(tz):
+            assert tz is UTC, f"Expected UTC, got {tz}"
+            return datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.side_effect = _now
         mock_serialize.return_value = {"filledPrice": 175.50}
         frame = MagicMock()
         frame.account = "DU12345"
@@ -588,7 +611,9 @@ class TestOnTransactionChanged:
 
         call_args = mock_publisher.publish.call_args
         event = call_args[0][1]
-        assert event.received_at == "2024-06-01T12:00:00+00:00"
+        assert event.received_at == datetime(
+            2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc,
+        )
 
     @patch("tiger_mcp.events.subscriber.datetime")
     @patch("tiger_mcp.events.subscriber.serialize_transaction")
@@ -600,7 +625,9 @@ class TestOnTransactionChanged:
         mock_publisher: MagicMock,
     ) -> None:
         """When frame.timestamp is missing, None should be passed."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         mock_serialize.return_value = {"filledPrice": 175.50}
         frame = MagicMock(spec=[])  # No attributes
 
@@ -627,7 +654,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should call the provided serializer with the frame."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={"key": "value"})
         frame = MagicMock()
         frame.account = "DU12345"
@@ -648,7 +677,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should pass the event_type to publisher.publish."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={"key": "value"})
         frame = MagicMock()
         frame.account = "DU12345"
@@ -670,7 +701,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should use frame.account when present."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={})
         frame = MagicMock()
         frame.account = "DU99999"
@@ -693,7 +726,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should fall back to settings account when frame lacks one."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={})
         frame = MagicMock(spec=[])  # No attributes
 
@@ -714,7 +749,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should fall back when frame.account is empty string."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={})
         frame = MagicMock()
         frame.account = ""
@@ -737,7 +774,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should use None when frame lacks timestamp."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={})
         frame = MagicMock(spec=[])
 
@@ -758,9 +797,10 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should capture current time as received_at."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-06-01T12:00:00+00:00"
-        )
+        def _now(tz):
+            assert tz is UTC, f"Expected UTC, got {tz}"
+            return datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.side_effect = _now
         serializer = MagicMock(return_value={})
         frame = MagicMock()
         frame.account = "DU12345"
@@ -773,7 +813,9 @@ class TestHandleEvent:
 
         call_args = mock_publisher.publish.call_args
         event = call_args[0][1]
-        assert event.received_at == "2024-06-01T12:00:00+00:00"
+        assert event.received_at == datetime(
+            2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc,
+        )
 
     def test_handle_event_logs_error_with_custom_key(
         self,
@@ -808,8 +850,8 @@ class TestHandleEvent:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Model construction errors should be caught and logged."""
-        mock_datetime.now.return_value.isoformat.return_value = (
-            "2024-01-15T10:30:00+00:00"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc,
         )
         serializer = MagicMock(return_value={"status": "FILLED"})
         frame = MagicMock()
@@ -840,7 +882,9 @@ class TestHandleEvent:
         mock_publisher: MagicMock,
     ) -> None:
         """_handle_event should construct the correct model type from serialized data."""
-        mock_datetime.now.return_value.isoformat.return_value = "t"
+        mock_datetime.now.return_value = datetime(
+            2024, 1, 1, tzinfo=timezone.utc,
+        )
         serializer = MagicMock(return_value={"filledPrice": 175.50})
         frame = MagicMock()
         frame.account = "DU12345"

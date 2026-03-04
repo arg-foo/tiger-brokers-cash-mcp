@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -62,7 +63,7 @@ def _make_order_event(**overrides: object) -> OrderStatusEvent:
     """Create a minimal valid OrderStatusEvent for testing."""
     defaults = {
         "account": "DU12345",
-        "received_at": "2024-01-15T10:30:00+00:00",
+        "received_at": datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
         "payload": {},
     }
     defaults.update(overrides)
@@ -271,14 +272,14 @@ class TestPublish:
     ) -> None:
         """publish() should include the received_at from the event model."""
         event = _make_order_event(
-            received_at="2024-01-15T10:30:00+00:00",
+            received_at=datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
             payload={"status": "FILLED"},
         )
         connected_publisher.publish("order", event)
 
         fields = mock_redis_client.xadd.call_args[0][1]
         data = json.loads(fields["data"])
-        assert data["received_at"] == "2024-01-15T10:30:00+00:00"
+        assert data["received_at"] == "2024-01-15T10:30:00Z"
 
     def test_publish_transaction_event(
         self,
@@ -288,7 +289,7 @@ class TestPublish:
         """publish() should handle TransactionEvent the same as OrderStatusEvent."""
         event = TransactionEvent(
             account="DU12345",
-            received_at="2024-01-15T10:30:00+00:00",
+            received_at=datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
             payload={"filledPrice": 175.50},
         )
         result = connected_publisher.publish("transaction", event)
