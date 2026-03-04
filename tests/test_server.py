@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -408,3 +408,243 @@ class TestTransportSelection:
             await main()
 
             mock_run_stdio.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# DNS rebinding protection: _build_transport_security
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTransportSecurity:
+    """Test the _build_transport_security helper function."""
+
+    def test_explicit_allowed_hosts_used_directly(self) -> None:
+        """When mcp_allowed_hosts is set, those values should be used as-is."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = ["myhost.example.com:8080"]
+        mock_settings.mcp_host = "0.0.0.0"
+
+        result = _build_transport_security(mock_settings)
+
+        assert result.allowed_hosts == ["myhost.example.com:8080"]
+        assert "http://myhost.example.com:8080" in result.allowed_origins
+        assert "https://myhost.example.com:8080" in result.allowed_origins
+        assert result.enable_dns_rebinding_protection is True
+
+    def test_auto_detect_for_0000(self) -> None:
+        """For 0.0.0.0 without explicit hosts, derive localhost variants."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "0.0.0.0"
+
+        result = _build_transport_security(mock_settings)
+
+        assert "localhost:*" in result.allowed_hosts
+        assert "127.0.0.1:*" in result.allowed_hosts
+        assert "[::1]:*" in result.allowed_hosts
+        assert "http://localhost:*" in result.allowed_origins
+        assert "https://localhost:*" in result.allowed_origins
+        assert "http://127.0.0.1:*" in result.allowed_origins
+        assert "http://[::1]:*" in result.allowed_origins
+
+    def test_auto_detect_for_localhost(self) -> None:
+        """When host is localhost and no explicit hosts, auto-derive all variants."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "localhost"
+
+        result = _build_transport_security(mock_settings)
+
+        assert "localhost:*" in result.allowed_hosts
+        assert "127.0.0.1:*" in result.allowed_hosts
+        assert "[::1]:*" in result.allowed_hosts
+
+    def test_auto_detect_for_127001(self) -> None:
+        """When host is 127.0.0.1 and no explicit hosts, auto-derive all variants."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "127.0.0.1"
+
+        result = _build_transport_security(mock_settings)
+
+        assert "localhost:*" in result.allowed_hosts
+        assert "127.0.0.1:*" in result.allowed_hosts
+        assert "[::1]:*" in result.allowed_hosts
+
+    def test_auto_detect_for_ipv6_loopback(self) -> None:
+        """When host is ::1 and no explicit hosts, auto-derive all variants."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "::1"
+
+        result = _build_transport_security(mock_settings)
+
+        assert "localhost:*" in result.allowed_hosts
+        assert "127.0.0.1:*" in result.allowed_hosts
+        assert "[::1]:*" in result.allowed_hosts
+
+    def test_non_local_host_uses_host_with_wildcard_port(self) -> None:
+        """A non-local host should use host:* pattern."""
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "api.example.com"
+
+        result = _build_transport_security(mock_settings)
+
+        assert result.allowed_hosts == ["api.example.com:*"]
+        assert "http://api.example.com:*" in result.allowed_origins
+        assert "https://api.example.com:*" in result.allowed_origins
+
+    def test_returns_transport_security_settings_type(self) -> None:
+        """Return type must be TransportSecuritySettings."""
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        from tiger_mcp.server import _build_transport_security
+
+        mock_settings = MagicMock()
+        mock_settings.mcp_allowed_hosts = []
+        mock_settings.mcp_host = "0.0.0.0"
+
+        result = _build_transport_security(mock_settings)
+        assert isinstance(result, TransportSecuritySettings)
+
+
+# ---------------------------------------------------------------------------
+# DNS rebinding protection: integration with main()
+# ---------------------------------------------------------------------------
+
+
+class TestTransportSecurityIntegration:
+    """Test that transport_security is wired into main() correctly."""
+
+    async def test_http_transport_sets_transport_security(self) -> None:
+        """When using streamable-http, main() must set transport_security."""
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        from tiger_mcp.server import main, mcp
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(
+                mcp, "run_streamable_http_async", return_value=None
+            ),
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "streamable-http"
+            mock_settings.mcp_host = "0.0.0.0"
+            mock_settings.mcp_port = 8000
+            mock_settings.mcp_allowed_hosts = []
+            mock_settings.events_enabled = False
+
+            await main()
+
+            ts = mcp.settings.transport_security
+            assert isinstance(ts, TransportSecuritySettings)
+            assert "localhost:*" in ts.allowed_hosts
+            assert "127.0.0.1:*" in ts.allowed_hosts
+            assert "[::1]:*" in ts.allowed_hosts
+
+    async def test_http_transport_with_explicit_hosts(self) -> None:
+        """Explicit mcp_allowed_hosts should override auto-detection."""
+        from tiger_mcp.server import main, mcp
+
+        mock_logger = MagicMock()
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(
+                mcp, "run_streamable_http_async", return_value=None
+            ),
+        ):
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "streamable-http"
+            mock_settings.mcp_host = "0.0.0.0"
+            mock_settings.mcp_port = 8000
+            mock_settings.mcp_allowed_hosts = ["custom.host:8080"]
+            mock_settings.events_enabled = False
+
+            await main()
+
+            ts = mcp.settings.transport_security
+            assert ts.allowed_hosts == ["custom.host:8080"]
+            assert "http://custom.host:8080" in ts.allowed_origins
+            assert "https://custom.host:8080" in ts.allowed_origins
+
+    async def test_stdio_transport_does_not_set_transport_security(
+        self,
+    ) -> None:
+        """When using stdio, main() should NOT set transport_security."""
+        from tiger_mcp.server import main, mcp
+
+        mock_logger = MagicMock()
+
+        # Use a known sentinel value so the assertion is not vacuous
+        sentinel_ts = None
+
+        with (
+            patch("tiger_mcp.server.Settings.from_env") as mock_from_env,
+            patch("tiger_mcp.server.configure_logging"),
+            patch("tiger_mcp.server.structlog") as mock_structlog,
+            patch("tiger_mcp.server.TigerClient"),
+            patch("tiger_mcp.server.DailyState"),
+            patch.object(tiger_mcp.tools.account.tools, "init"),
+            patch.object(tiger_mcp.tools.market_data.tools, "init"),
+            patch.object(tiger_mcp.tools.orders.query, "init"),
+            patch.object(tiger_mcp.tools.orders.execution, "init"),
+            patch.object(tiger_mcp.tools.orders.management, "init"),
+            patch.object(
+                mcp, "run_stdio_async", return_value=None
+            ),
+        ):
+            # Reset to sentinel before running main()
+            mcp.settings.transport_security = sentinel_ts
+
+            mock_structlog.get_logger.return_value = mock_logger
+            mock_settings = mock_from_env.return_value
+            mock_settings.tiger_id = "test-id"
+            mock_settings.state_dir = "/tmp/state"
+            mock_settings.mcp_transport = "stdio"
+            mock_settings.events_enabled = False
+
+            await main()
+
+            # transport_security should still be the sentinel (not overwritten)
+            assert mcp.settings.transport_security is sentinel_ts

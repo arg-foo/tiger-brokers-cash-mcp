@@ -20,6 +20,7 @@ import sys
 
 import structlog
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from tiger_mcp.config import Settings
 
@@ -101,6 +102,45 @@ def configure_logging() -> None:
 
 
 # ---------------------------------------------------------------------------
+# DNS rebinding protection
+# ---------------------------------------------------------------------------
+
+# 0.0.0.0 is a bind-all address, not a true loopback, but when used as the
+# listen address with no explicit allowed hosts we default to loopback
+# variants so that local development works out-of-the-box.  For non-local
+# access, operators must set MCP_ALLOWED_HOSTS explicitly.
+_LOCALHOST_ALIASES = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _build_transport_security(
+    settings: Settings,
+) -> TransportSecuritySettings:
+    """Build transport security settings for DNS rebinding protection.
+
+    When ``settings.mcp_allowed_hosts`` is non-empty, those values are used
+    directly.  Otherwise the allowed hosts are auto-derived from
+    ``settings.mcp_host``: localhost aliases get all common loopback
+    variants, while non-local hosts get a ``host:*`` wildcard-port pattern.
+    """
+    if settings.mcp_allowed_hosts:
+        allowed_hosts = list(settings.mcp_allowed_hosts)
+    elif settings.mcp_host in _LOCALHOST_ALIASES:
+        allowed_hosts = ["localhost:*", "127.0.0.1:*", "[::1]:*"]
+    else:
+        allowed_hosts = [f"{settings.mcp_host}:*"]
+
+    allowed_origins = (
+        [f"http://{h}" for h in allowed_hosts]
+        + [f"https://{h}" for h in allowed_hosts]
+    )
+
+    return TransportSecuritySettings(
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Async entry point
 # ---------------------------------------------------------------------------
 
@@ -176,6 +216,21 @@ async def main() -> None:
         if settings.mcp_transport == "streamable-http":
             mcp.settings.host = settings.mcp_host
             mcp.settings.port = settings.mcp_port
+            mcp.settings.transport_security = _build_transport_security(
+                settings
+            )
+            if (
+                settings.mcp_host == "0.0.0.0"
+                and not settings.mcp_allowed_hosts
+            ):
+                logger.warning(
+                    "dns_rebinding_loopback_only",
+                    msg=(
+                        "MCP_HOST is 0.0.0.0 with no MCP_ALLOWED_HOSTS; "
+                        "only loopback clients will be accepted. "
+                        "Set MCP_ALLOWED_HOSTS for external access."
+                    ),
+                )
             await mcp.run_streamable_http_async()
         else:
             await mcp.run_stdio_async()
