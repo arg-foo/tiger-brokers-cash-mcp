@@ -98,6 +98,9 @@ def serialize_order_status(frame: Any) -> dict[str, Any]:
     Fields with falsy values (``0``, ``0.0``, ``False``, ``""``) are
     preserved — only truly missing attributes are omitted.
 
+    The ``id`` field is converted to a string to prevent JSON integer
+    precision loss in JavaScript-based consumers.
+
     Parameters
     ----------
     frame:
@@ -113,6 +116,8 @@ def serialize_order_status(frame: Any) -> dict[str, Any]:
         val = getattr(frame, attr, _MISSING)
         if val is not _MISSING:
             result[attr] = val
+    if "id" in result:
+        result["id"] = str(result["id"])
     return result
 
 
@@ -125,6 +130,9 @@ def serialize_transaction(frame: Any) -> dict[str, Any]:
 
     Fields with falsy values (``0``, ``0.0``, ``False``, ``""``) are
     preserved — only truly missing attributes are omitted.
+
+    The ``id`` and ``orderId`` fields are converted to strings to prevent
+    JSON integer precision loss in JavaScript-based consumers.
 
     Parameters
     ----------
@@ -141,4 +149,7 @@ def serialize_transaction(frame: Any) -> dict[str, Any]:
         val = getattr(frame, attr, _MISSING)
         if val is not _MISSING:
             result[attr] = val
+    for key in ("id", "orderId"):
+        if key in result:
+            result[key] = str(result[key])
     return result

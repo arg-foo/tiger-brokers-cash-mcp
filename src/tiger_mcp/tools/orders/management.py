@@ -212,7 +212,7 @@ async def _run_modify_safety_checks(
 
 @mcp.tool()
 async def modify_order(
-    order_id: int,
+    order_id: str,
     quantity: int | None = None,
     limit_price: float | None = None,
     stop_price: float | None = None,
@@ -231,7 +231,8 @@ async def modify_order(
     Parameters
     ----------
     order_id:
-        The numeric order identifier to modify.
+        The order identifier as a string (to avoid JSON integer
+        precision loss in JavaScript-based MCP hosts).
     quantity:
         New order quantity (number of shares).  Pass ``None`` to leave
         unchanged.
@@ -256,10 +257,15 @@ async def modify_order(
             "Specify at least one of: quantity, limit_price, stop_price."
         )
 
+    try:
+        int_order_id = int(order_id)
+    except (ValueError, TypeError):
+        return f"Error: Invalid order_id {order_id!r}. Must be a numeric string."
+
     # Fetch current order details to validate it exists and is modifiable.
     try:
         detail: dict[str, Any] = await _client.get_order_detail(
-            order_id=order_id,
+            order_id=int_order_id,
         )
     except Exception as exc:
         return (
@@ -297,7 +303,7 @@ async def modify_order(
     # Apply the modification.
     try:
         await _client.modify_order(
-            order_id=order_id,
+            order_id=int_order_id,
             quantity=quantity,
             limit_price=limit_price,
             stop_price=stop_price,
@@ -344,7 +350,7 @@ async def modify_order(
 
 
 @mcp.tool()
-async def cancel_order(order_id: int) -> str:
+async def cancel_order(order_id: str) -> str:
     """Cancel a single order by its ID.
 
     Validates the order exists by fetching its detail before attempting
@@ -353,7 +359,8 @@ async def cancel_order(order_id: int) -> str:
     Parameters
     ----------
     order_id:
-        The numeric order identifier to cancel.
+        The order identifier as a string (to avoid JSON integer
+        precision loss in JavaScript-based MCP hosts).
 
     Returns
     -------
@@ -364,10 +371,15 @@ async def cancel_order(order_id: int) -> str:
     if _client is None:
         return "Error: TigerClient is not initialized. Server setup incomplete."
 
+    try:
+        int_order_id = int(order_id)
+    except (ValueError, TypeError):
+        return f"Error: Invalid order_id {order_id!r}. Must be a numeric string."
+
     # Fetch order detail to validate it exists and is cancellable.
     try:
         detail: dict[str, Any] = await _client.get_order_detail(
-            order_id=order_id,
+            order_id=int_order_id,
         )
     except Exception as exc:
         return (
@@ -377,7 +389,7 @@ async def cancel_order(order_id: int) -> str:
 
     # Cancel the order.
     try:
-        await _client.cancel_order(order_id=order_id)
+        await _client.cancel_order(order_id=int_order_id)
     except Exception as exc:
         return (
             f"Error: Failed to cancel order {order_id}. "

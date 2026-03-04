@@ -145,6 +145,54 @@ class TestGetOpenOrders:
 # ---------------------------------------------------------------------------
 
 
+class TestGetOrderDetailStringId:
+    """Tests for get_order_detail order_id string parameter."""
+
+    async def test_invalid_order_id_returns_validation_error(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """get_order_detail with non-numeric string should return error."""
+        result = await order_query_mod.get_order_detail(order_id="abc")
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+        mock_client.get_order_detail.assert_not_awaited()
+
+    async def test_empty_order_id_returns_validation_error(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """get_order_detail with empty string should return error."""
+        result = await order_query_mod.get_order_detail(order_id="")
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+        mock_client.get_order_detail.assert_not_awaited()
+
+    async def test_large_order_id_preserves_precision(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """get_order_detail with large ID (>2^53) should convert correctly."""
+        large_id = "42421876124944380"
+        mock_client.get_order_detail.return_value = {
+            "order_id": large_id,
+            "symbol": "AAPL",
+            "action": "BUY",
+            "order_type": "limit",
+            "quantity": 100,
+            "status": "FILLED",
+        }
+
+        result = await order_query_mod.get_order_detail(order_id=large_id)
+
+        mock_client.get_order_detail.assert_awaited_once_with(
+            order_id=42421876124944380,
+        )
+        assert large_id in result
+
+
 class TestGetOrderDetail:
     """Tests for the get_order_detail MCP tool."""
 
@@ -169,7 +217,7 @@ class TestGetOrderDetail:
             "commission": 1.99,
         }
 
-        result = await order_query_mod.get_order_detail(order_id=12345)
+        result = await order_query_mod.get_order_detail(order_id="12345")
 
         mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
         assert "12345" in result
@@ -193,7 +241,7 @@ class TestGetOrderDetail:
             "get_order_detail failed: Order not found"
         )
 
-        result = await order_query_mod.get_order_detail(order_id=99999)
+        result = await order_query_mod.get_order_detail(order_id="99999")
 
         assert "error" in result.lower() or "Error" in result
         assert "99999" in result
@@ -219,7 +267,7 @@ class TestGetOrderDetail:
             "commission": 2.50,
         }
 
-        result = await order_query_mod.get_order_detail(order_id=55555)
+        result = await order_query_mod.get_order_detail(order_id="55555")
 
         assert "55555" in result
         assert "TSLA" in result

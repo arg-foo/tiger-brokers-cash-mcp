@@ -454,7 +454,7 @@ class TestOrderMethods:
         )
 
         mock_trade_client.place_order.assert_called_once()
-        assert result["order_id"] == 12346
+        assert result["order_id"] == "12346"
 
     async def test_place_order_stop_limit(
         self,
@@ -478,7 +478,7 @@ class TestOrderMethods:
         )
 
         mock_trade_client.place_order.assert_called_once()
-        assert result["order_id"] == 12348
+        assert result["order_id"] == "12348"
 
     async def test_modify_order_calls_sdk(
         self,
@@ -538,7 +538,7 @@ class TestOrderMethods:
 
         mock_trade_client.cancel_order.assert_called_once()
         assert isinstance(result, dict)
-        assert result["order_id"] == 12345
+        assert result["order_id"] == "12345"
 
     async def test_cancel_all_orders_calls_sdk(
         self,
@@ -556,6 +556,9 @@ class TestOrderMethods:
         result = await tiger_client.cancel_all_orders()
 
         assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["order_id"] == "111"
+        assert result[1]["order_id"] == "222"
 
     async def test_get_open_orders_calls_sdk(
         self,

@@ -165,7 +165,13 @@ class TigerClient:
 
     @staticmethod
     def _order_to_dict(order: Any) -> dict[str, Any]:
-        """Convert a tigeropen Order object to a plain dict."""
+        """Convert a tigeropen Order object to a plain dict.
+
+        Order ID fields (``id``, ``order_id``) are converted to strings
+        to prevent JSON integer precision loss in JavaScript-based MCP
+        hosts.
+        """
+        str_fields = frozenset({"id", "order_id"})
         result: dict[str, Any] = {}
         for attr in (
             "id",
@@ -185,7 +191,7 @@ class TigerClient:
         ):
             val = getattr(order, attr, None)
             if val is not None:
-                result[attr] = val
+                result[attr] = str(val) if attr in str_fields else val
         return result
 
     @staticmethod
@@ -334,7 +340,7 @@ class TigerClient:
     ) -> dict[str, Any]:
         """Place an order and return the order ID.
 
-        Returns a dict containing at minimum ``{"order_id": <int>}``.
+        Returns a dict containing at minimum ``{"order_id": <str>}``.
         """
         try:
             order = self._build_order(
@@ -342,7 +348,7 @@ class TigerClient:
             )
             await self._run_sync(self._trade_client.place_order, order)
             return {
-                "order_id": order.id,
+                "order_id": str(order.id),
                 "symbol": symbol,
                 "action": action,
                 "quantity": quantity,
@@ -384,7 +390,7 @@ class TigerClient:
                     self._trade_client.modify_order, order, **kwargs
                 ),
             )
-            return {"order_id": order_id, "modified": True, "result": result}
+            return {"order_id": str(order_id), "modified": True, "result": result}
         except Exception as exc:
             msg = f"modify_order failed: {exc}"
             raise RuntimeError(msg) from exc
@@ -397,7 +403,7 @@ class TigerClient:
                     self._trade_client.cancel_order, id=order_id
                 ),
             )
-            return {"order_id": order_id, "cancelled": True, "result": result}
+            return {"order_id": str(order_id), "cancelled": True, "result": result}
         except Exception as exc:
             msg = f"cancel_order failed: {exc}"
             raise RuntimeError(msg) from exc
@@ -426,7 +432,7 @@ class TigerClient:
                 )
                 results.append(
                     {
-                        "order_id": order.id,
+                        "order_id": str(order.id),
                         "cancelled": True,
                         "result": cancel_result,
                     }

@@ -36,7 +36,7 @@ def mock_client() -> AsyncMock:
     }
     # Default place order
     client.place_order.return_value = {
-        "order_id": 12345,
+        "order_id": "12345",
         "symbol": "AAPL",
         "action": "BUY",
         "quantity": 100,
@@ -496,7 +496,7 @@ class TestPlaceStockOrder:
         """Successful place_stock_order should include order_id, status in result."""
         mock_safety.return_value = _safety_passed()
         mock_client.place_order.return_value = {
-            "order_id": 99999,
+            "order_id": "99999",
             "symbol": "TSLA",
             "action": "BUY",
             "quantity": 50,

@@ -132,13 +132,14 @@ async def get_open_orders(symbol: str = "") -> str:
 
 
 @mcp.tool()
-async def get_order_detail(order_id: int) -> str:
+async def get_order_detail(order_id: str) -> str:
     """Retrieve full details for a single order.
 
     Parameters
     ----------
     order_id:
-        The numeric order identifier.
+        The order identifier as a string (to avoid JSON integer
+        precision loss in JavaScript-based MCP hosts).
 
     Returns
     -------
@@ -152,7 +153,12 @@ async def get_order_detail(order_id: int) -> str:
         raise RuntimeError(msg)
 
     try:
-        detail = await _client.get_order_detail(order_id=order_id)
+        int_order_id = int(order_id)
+    except (ValueError, TypeError):
+        return f"Error: Invalid order_id {order_id!r}. Must be a numeric string."
+
+    try:
+        detail = await _client.get_order_detail(order_id=int_order_id)
     except Exception as exc:
         return (
             f"Error: Could not retrieve order {order_id}. "

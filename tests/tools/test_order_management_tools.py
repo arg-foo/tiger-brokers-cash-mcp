@@ -55,7 +55,7 @@ def _init_module(
 
 def _make_buy_order_detail(
     *,
-    order_id: int = 12345,
+    order_id: str = "12345",
     symbol: str = "AAPL",
     quantity: int = 100,
     limit_price: float = 150.0,
@@ -76,7 +76,7 @@ def _make_buy_order_detail(
 
 def _make_sell_order_detail(
     *,
-    order_id: int = 12345,
+    order_id: str = "12345",
     symbol: str = "AAPL",
     quantity: int = 100,
     limit_price: float = 150.0,
@@ -111,6 +111,61 @@ def _setup_account_and_positions(
 
 
 # ---------------------------------------------------------------------------
+# String order_id validation
+# ---------------------------------------------------------------------------
+
+
+class TestOrderIdStringValidation:
+    """Tests for invalid order_id string inputs."""
+
+    async def test_modify_order_invalid_order_id(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """modify_order with non-numeric string should return error."""
+        result = await order_mgmt_mod.modify_order(
+            order_id="abc", quantity=100
+        )
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+        mock_client.get_order_detail.assert_not_awaited()
+
+    async def test_cancel_order_invalid_order_id(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """cancel_order with non-numeric string should return error."""
+        result = await order_mgmt_mod.cancel_order(order_id="abc")
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+        mock_client.get_order_detail.assert_not_awaited()
+
+    async def test_modify_order_empty_order_id(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """modify_order with empty string should return error."""
+        result = await order_mgmt_mod.modify_order(
+            order_id="", quantity=100
+        )
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+
+    async def test_cancel_order_empty_order_id(
+        self,
+        mock_client: AsyncMock,
+    ) -> None:
+        """cancel_order with empty string should return error."""
+        result = await order_mgmt_mod.cancel_order(order_id="")
+
+        assert "error" in result.lower()
+        assert "invalid" in result.lower()
+
+
+# ---------------------------------------------------------------------------
 # modify_order
 # ---------------------------------------------------------------------------
 
@@ -132,7 +187,7 @@ class TestModifyOrder:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
@@ -156,7 +211,7 @@ class TestModifyOrder:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=155.0
+            order_id="12345", limit_price=155.0
         )
 
         mock_client.modify_order.assert_awaited_once_with(
@@ -170,7 +225,7 @@ class TestModifyOrder:
         mock_client: AsyncMock,
     ) -> None:
         """modify_order with all params None should return an error message."""
-        result = await order_mgmt_mod.modify_order(order_id=12345)
+        result = await order_mgmt_mod.modify_order(order_id="12345")
 
         assert "error" in result.lower()
         # Should NOT have called the API since no modifications were requested
@@ -187,7 +242,7 @@ class TestModifyOrder:
         )
 
         result = await order_mgmt_mod.modify_order(
-            order_id=99999, quantity=50
+            order_id="99999", quantity=50
         )
 
         assert "error" in result.lower()
@@ -207,7 +262,7 @@ class TestModifyOrder:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200, limit_price=155.0
+            order_id="12345", quantity=200, limit_price=155.0
         )
 
         assert "AAPL" in result
@@ -225,7 +280,7 @@ class TestModifyOrder:
         )
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         assert "error" in result.lower()
@@ -247,7 +302,7 @@ class TestModifyOrder:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should have fetched account data for safety checks
@@ -267,7 +322,7 @@ class TestModifyOrder:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=50
+            order_id="12345", quantity=50
         )
 
         # Should NOT have fetched account data
@@ -288,7 +343,7 @@ class TestModifyOrder:
         )
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should block the modification due to safety error
@@ -318,7 +373,7 @@ class TestModifyOrderFullSafetyChecks:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should have fetched account and positions
@@ -342,7 +397,7 @@ class TestModifyOrderFullSafetyChecks:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=200.0
+            order_id="12345", limit_price=200.0
         )
 
         # Safety checks should have been triggered for price change on BUY
@@ -365,7 +420,7 @@ class TestModifyOrderFullSafetyChecks:
         _setup_account_and_positions(mock_client)
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should block - the order value of $30,000 exceeds limit of $10,000
@@ -400,7 +455,7 @@ class TestModifyOrderFullSafetyChecks:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should succeed but include a warning
@@ -423,7 +478,7 @@ class TestModifyOrderFullSafetyChecks:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         # Should NOT fetch account/positions for SELL orders
@@ -446,7 +501,7 @@ class TestModifyOrderFullSafetyChecks:
         }
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, limit_price=100.0
+            order_id="12345", limit_price=100.0
         )
 
         # Lowering price is not increasing risk; skip safety checks
@@ -463,7 +518,7 @@ class TestModifyOrderFullSafetyChecks:
         mock_client.get_assets.side_effect = RuntimeError("Account fetch failed")
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         assert "error" in result.lower()
@@ -484,7 +539,7 @@ class TestModifyOrderFullSafetyChecks:
         _setup_account_and_positions(mock_client)
 
         result = await order_mgmt_mod.modify_order(
-            order_id=12345, quantity=200
+            order_id="12345", quantity=200
         )
 
         assert "blocked" in result.lower() or "error" in result.lower()
@@ -540,7 +595,7 @@ class TestCancelOrder:
             "result": None,
         }
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         mock_client.get_order_detail.assert_awaited_once_with(order_id=12345)
         mock_client.cancel_order.assert_awaited_once_with(order_id=12345)
@@ -568,7 +623,7 @@ class TestCancelOrder:
             "result": None,
         }
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "AAPL" in result
 
@@ -581,7 +636,7 @@ class TestCancelOrder:
             "cancel_order failed: Order already cancelled"
         )
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "error" in result.lower()
         assert "12345" in result
@@ -605,7 +660,7 @@ class TestCancelOrder:
             "cancel_order failed: Network error"
         )
 
-        result = await order_mgmt_mod.cancel_order(order_id=12345)
+        result = await order_mgmt_mod.cancel_order(order_id="12345")
 
         assert "error" in result.lower()
         assert "12345" in result
