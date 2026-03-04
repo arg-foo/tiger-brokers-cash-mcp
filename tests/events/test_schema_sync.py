@@ -16,11 +16,8 @@ import pytest
 
 from tiger_mcp.events.models import (
     EVENT_SCHEMA_REGISTRY,
-    OrderStatusEvent,
     OrderStatusPayload,
-    TransactionEvent,
     TransactionPayload,
-    generate_event_schema,
 )
 
 # Resolve the schemas directory relative to the repo root.
@@ -37,33 +34,30 @@ class TestSchemaStaleness:
     """Verify committed JSON schema files match Pydantic model output."""
 
     @pytest.mark.parametrize(
-        ("schema_file", "model", "payload_model"),
-        [
-            ("order.json", OrderStatusEvent, OrderStatusPayload),
-            ("transaction.json", TransactionEvent, TransactionPayload),
-        ],
-        ids=["order", "transaction"],
+        ("name", "model"),
+        EVENT_SCHEMA_REGISTRY,
+        ids=[entry[0] for entry in EVENT_SCHEMA_REGISTRY],
     )
     def test_committed_schema_matches_model(
-        self, schema_file: str, model: type, payload_model: type
+        self, name: str, model: type
     ) -> None:
-        """The committed schema file must be identical to generate_event_schema().
+        """The committed schema file must be identical to model.model_json_schema().
 
         If this test fails, run:
             uv run python -m tiger_mcp.events.models
         to regenerate the schema files.
         """
-        schema_path = _SCHEMA_DIR / schema_file
+        schema_path = _SCHEMA_DIR / f"{name}.json"
         assert schema_path.exists(), (
             f"Schema file not found: {schema_path}. "
             "Run: uv run python -m tiger_mcp.events.models"
         )
 
         committed = json.loads(schema_path.read_text())
-        generated = generate_event_schema(model, payload_model)
+        generated = model.model_json_schema()
 
         assert committed == generated, (
-            f"Committed {schema_file} is stale. "
+            f"Committed {name}.json is stale. "
             "Run: uv run python -m tiger_mcp.events.models"
         )
 
