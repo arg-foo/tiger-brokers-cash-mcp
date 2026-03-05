@@ -1,7 +1,7 @@
 """Integration tests for server wiring and tool registration.
 
 Verifies that:
-- All 12 tools are registered with the FastMCP server instance.
+- All 16 tools are registered with the FastMCP server instance.
 - Tool modules are importable and register their tools at import time.
 - main() creates TigerClient / DailyState and calls init() on each module.
 - The server can be imported without real credentials (no side effects).
@@ -30,13 +30,13 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    """Verify all 12 tools are registered with the MCP server instance."""
+    """Verify all 16 tools are registered with the MCP server instance."""
 
-    def test_all_12_tools_registered(self) -> None:
-        """Importing the server module should result in 12 registered tools."""
+    def test_all_16_tools_registered(self) -> None:
+        """Importing the server module should result in 16 registered tools."""
         tool_names = _get_registered_tool_names()
-        assert len(tool_names) == 12, (
-            f"Expected 12 tools to be registered, got {len(tool_names)}. "
+        assert len(tool_names) == 16, (
+            f"Expected 16 tools to be registered, got {len(tool_names)}. "
             f"Tool names: {sorted(tool_names)}"
         )
 
@@ -97,6 +97,19 @@ class TestToolRegistration:
             f"Missing order management tools: {expected - tool_names}"
         )
 
+    def test_oca_bracket_tools_registered(self) -> None:
+        """The four OCA/bracket tools must be registered."""
+        tool_names = _get_registered_tool_names()
+        expected = {
+            "preview_oca_order",
+            "place_oca_order",
+            "preview_bracket_order",
+            "place_bracket_order",
+        }
+        assert expected.issubset(tool_names), (
+            f"Missing OCA/bracket tools: {expected - tool_names}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Import ordering
@@ -116,6 +129,7 @@ class TestImportOrdering:
         import tiger_mcp.tools.market_data.tools  # noqa: F401
         import tiger_mcp.tools.orders.execution  # noqa: F401
         import tiger_mcp.tools.orders.management  # noqa: F401
+        import tiger_mcp.tools.orders.oca  # noqa: F401
         import tiger_mcp.tools.orders.query  # noqa: F401
 
     def test_mcp_instance_is_same_across_all_modules(self) -> None:
@@ -126,6 +140,7 @@ class TestImportOrdering:
         import tiger_mcp.tools.market_data.tools as market_mod
         import tiger_mcp.tools.orders.execution as exec_mod
         import tiger_mcp.tools.orders.management as mgmt_mod
+        import tiger_mcp.tools.orders.oca as oca_mod
         import tiger_mcp.tools.orders.query as query_mod
         from tiger_mcp.server import mcp as server_mcp
 
@@ -134,6 +149,7 @@ class TestImportOrdering:
         assert exec_mod.mcp is server_mcp
         assert query_mod.mcp is server_mcp
         assert mgmt_mod.mcp is server_mcp
+        assert oca_mod.mcp is server_mcp
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +161,7 @@ class TestMainWiring:
     """Verify main() creates dependencies and calls init() on tool modules."""
 
     @patch("tiger_mcp.server.mcp")
+    @patch("tiger_mcp.tools.orders.oca.init")
     @patch("tiger_mcp.tools.orders.management.init")
     @patch("tiger_mcp.tools.orders.execution.init")
     @patch("tiger_mcp.tools.orders.query.init")
@@ -163,6 +180,7 @@ class TestMainWiring:
         mock_query_init: MagicMock,
         mock_exec_init: MagicMock,
         mock_mgmt_init: MagicMock,
+        mock_oca_init: MagicMock,
         mock_mcp: MagicMock,
     ) -> None:
         """main() should create TigerClient, DailyState and call init()."""
@@ -195,13 +213,23 @@ class TestMainWiring:
         mock_market_init.assert_called_once_with(mock_client)
         mock_query_init.assert_called_once_with(mock_client)
         mock_exec_init.assert_called_once_with(
-            mock_client, mock_state, mock_settings,
+            mock_client,
+            mock_state,
+            mock_settings,
         )
         mock_mgmt_init.assert_called_once_with(
-            mock_client, mock_state, mock_settings,
+            mock_client,
+            mock_state,
+            mock_settings,
+        )
+        mock_oca_init.assert_called_once_with(
+            mock_client,
+            mock_state,
+            mock_settings,
         )
 
     @patch("tiger_mcp.server.mcp")
+    @patch("tiger_mcp.tools.orders.oca.init")
     @patch("tiger_mcp.tools.orders.management.init")
     @patch("tiger_mcp.tools.orders.execution.init")
     @patch("tiger_mcp.tools.orders.query.init")
@@ -220,6 +248,7 @@ class TestMainWiring:
         mock_query_init: MagicMock,
         mock_exec_init: MagicMock,
         mock_mgmt_init: MagicMock,
+        mock_oca_init: MagicMock,
         mock_mcp: MagicMock,
     ) -> None:
         """main() should call mcp.run_stdio_async() to start the server."""

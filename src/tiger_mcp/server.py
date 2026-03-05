@@ -60,7 +60,7 @@ async def health_check(request):  # noqa: ARG001
 
 # ---------------------------------------------------------------------------
 # Tool registration -- importing these modules triggers @mcp.tool()
-# decorators, registering all 12 tools with the ``mcp`` instance.
+# decorators, registering all 16 tools with the ``mcp`` instance.
 #
 # IMPORTANT: These imports MUST come after ``mcp`` is defined above
 # to avoid circular import errors.
@@ -70,6 +70,7 @@ import tiger_mcp.tools.account.tools  # noqa: E402, F401, I001
 import tiger_mcp.tools.market_data.tools  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.execution  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.management  # noqa: E402, F401, I001
+import tiger_mcp.tools.orders.oca  # noqa: E402, F401, I001
 import tiger_mcp.tools.orders.query  # noqa: E402, F401, I001
 from tiger_mcp.api.tiger_client import TigerClient  # noqa: E402, I001
 from tiger_mcp.safety.state import DailyState  # noqa: E402, I001
@@ -129,10 +130,9 @@ def _build_transport_security(
     else:
         allowed_hosts = [f"{settings.mcp_host}:*"]
 
-    allowed_origins = (
-        [f"http://{h}" for h in allowed_hosts]
-        + [f"https://{h}" for h in allowed_hosts]
-    )
+    allowed_origins = [f"http://{h}" for h in allowed_hosts] + [
+        f"https://{h}" for h in allowed_hosts
+    ]
 
     return TransportSecuritySettings(
         allowed_hosts=allowed_hosts,
@@ -177,6 +177,7 @@ async def main() -> None:
     tiger_mcp.tools.orders.query.init(client)
     tiger_mcp.tools.orders.execution.init(client, state, settings)
     tiger_mcp.tools.orders.management.init(client, state, settings)
+    tiger_mcp.tools.orders.oca.init(client, state, settings)
 
     logger.info(
         "tiger_mcp_tools_initialized",
@@ -203,7 +204,8 @@ async def main() -> None:
             )
             raise
         push_subscriber = PushSubscriber(
-            settings=settings, publisher=publisher,
+            settings=settings,
+            publisher=publisher,
         )
         try:
             push_subscriber.start()
@@ -216,13 +218,8 @@ async def main() -> None:
         if settings.mcp_transport == "streamable-http":
             mcp.settings.host = settings.mcp_host
             mcp.settings.port = settings.mcp_port
-            mcp.settings.transport_security = _build_transport_security(
-                settings
-            )
-            if (
-                settings.mcp_host == "0.0.0.0"
-                and not settings.mcp_allowed_hosts
-            ):
+            mcp.settings.transport_security = _build_transport_security(settings)
+            if settings.mcp_host == "0.0.0.0" and not settings.mcp_allowed_hosts:
                 logger.warning(
                     "dns_rebinding_loopback_only",
                     msg=(

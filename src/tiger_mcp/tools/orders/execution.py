@@ -17,7 +17,7 @@ function during server startup.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from tiger_mcp.safety.checks import (
     AccountInfo,
@@ -28,7 +28,11 @@ from tiger_mcp.safety.checks import (
 )
 from tiger_mcp.safety.state import DailyState
 from tiger_mcp.server import mcp
-from tiger_mcp.tools.orders._helpers import format_safety_result, get_effective_config
+from tiger_mcp.tools.orders._helpers import (
+    fetch_safety_data,
+    format_safety_result,
+    get_effective_config,
+)
 
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
@@ -118,15 +122,10 @@ def _validate_order_params(
         return "Invalid symbol: symbol must be uppercase."
 
     if action not in _VALID_ACTIONS:
-        return (
-            f"Invalid action: {action!r}. Must be BUY or SELL."
-        )
+        return f"Invalid action: {action!r}. Must be BUY or SELL."
 
     if quantity <= 0:
-        return (
-            f"Invalid quantity: {quantity}. "
-            "Must be a positive integer."
-        )
+        return f"Invalid quantity: {quantity}. Must be a positive integer."
 
     if order_type not in _VALID_ORDER_TYPES:
         return (
@@ -135,31 +134,12 @@ def _validate_order_params(
         )
 
     if order_type in ("LMT", "STP_LMT") and limit_price is None:
-        return (
-            f"limit_price is required for {order_type} orders."
-        )
+        return f"limit_price is required for {order_type} orders."
 
     if order_type == "STP_LMT" and stop_price is None:
-        return (
-            f"stop_price is required for {order_type} orders."
-        )
+        return f"stop_price is required for {order_type} orders."
 
     return None
-
-
-async def _fetch_safety_data(
-    client: TigerClient,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Fetch account and position data from TigerClient.
-
-    Returns
-    -------
-    tuple
-        ``(account_data, positions_data)``
-    """
-    assets = await client.get_assets()
-    positions = await client.get_positions()
-    return assets, positions
 
 
 async def _build_and_run_safety(
@@ -173,7 +153,7 @@ async def _build_and_run_safety(
     stop_price: float | None,
 ) -> SafetyResult:
     """Fetch data and run all safety checks."""
-    assets, positions = await _fetch_safety_data(client)
+    assets, positions = await fetch_safety_data(client)
 
     order_params = OrderParams(
         symbol=symbol,
@@ -249,14 +229,16 @@ async def preview_stock_order(
         any safety check results (errors and warnings).
     """
     if _client is None or _state is None:
-        return (
-            "Error: module not initialised. Call init() first."
-        )
+        return "Error: module not initialised. Call init() first."
 
     # 1. Validate parameters
     validation_error = _validate_order_params(
-        symbol, action, quantity, order_type,
-        limit_price, stop_price,
+        symbol,
+        action,
+        quantity,
+        order_type,
+        limit_price,
+        stop_price,
     )
     if validation_error:
         return f"Error: {validation_error}"
@@ -264,15 +246,22 @@ async def preview_stock_order(
     # 2. Fetch data and run safety checks
     try:
         safety_result = await _build_and_run_safety(
-            _client, _state, symbol, action, quantity,
-            order_type, limit_price, stop_price,
+            _client,
+            _state,
+            symbol,
+            action,
+            quantity,
+            order_type,
+            limit_price,
+            stop_price,
         )
     except Exception as exc:
         return f"Error fetching market data: {exc}"
 
     # 3. Fetch cost preview from broker
     client_order_type = _ORDER_TYPE_MAP.get(
-        order_type, order_type,
+        order_type,
+        order_type,
     )
     try:
         preview = await _client.preview_order(
@@ -363,14 +352,16 @@ async def place_stock_order(
         blocked.
     """
     if _client is None or _state is None:
-        return (
-            "Error: module not initialised. Call init() first."
-        )
+        return "Error: module not initialised. Call init() first."
 
     # 1. Validate parameters
     validation_error = _validate_order_params(
-        symbol, action, quantity, order_type,
-        limit_price, stop_price,
+        symbol,
+        action,
+        quantity,
+        order_type,
+        limit_price,
+        stop_price,
     )
     if validation_error:
         return f"Error: {validation_error}"
@@ -378,8 +369,14 @@ async def place_stock_order(
     # 2. Fetch data and run safety checks
     try:
         safety_result = await _build_and_run_safety(
-            _client, _state, symbol, action, quantity,
-            order_type, limit_price, stop_price,
+            _client,
+            _state,
+            symbol,
+            action,
+            quantity,
+            order_type,
+            limit_price,
+            stop_price,
         )
     except Exception as exc:
         return f"Error fetching market data: {exc}"
@@ -398,7 +395,8 @@ async def place_stock_order(
 
     # 4. Place the order
     client_order_type = _ORDER_TYPE_MAP.get(
-        order_type, order_type,
+        order_type,
+        order_type,
     )
     try:
         order_result = await _client.place_order(
