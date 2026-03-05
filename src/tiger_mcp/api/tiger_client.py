@@ -510,8 +510,8 @@ class TigerClient:
             action="SELL",
             quantity=quantity,
             order_legs=legs,
-            time_in_force=_TIME_IN_FORCE,
         )
+        order.time_in_force = _TIME_IN_FORCE
         order.outside_rth = False
         return order
 
@@ -599,8 +599,8 @@ class TigerClient:
             quantity=quantity,
             limit_price=entry_limit_price,
             order_legs=legs,
-            time_in_force=_TIME_IN_FORCE,
         )
+        order.time_in_force = _TIME_IN_FORCE
         order.outside_rth = False
         return order
 
