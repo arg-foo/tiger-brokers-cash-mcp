@@ -865,3 +865,231 @@ class TestOrderToDictIdConversion:
         assert result["order_id"] == "99999"
         assert isinstance(result["order_id"], str)
         assert result["symbol"] == "AAPL"  # non-ID field stays as-is
+
+
+# ---------------------------------------------------------------------------
+# OCA & Bracket order methods
+# ---------------------------------------------------------------------------
+
+
+class TestOcaBracketOrders:
+    """Test OCA and bracket order client methods."""
+
+    async def test_build_oca_order_calls_oca_order_util(
+        self,
+        tiger_client: Any,
+    ) -> None:
+        """_build_oca_order should call oca_order with correct params."""
+        with (
+            patch("tiger_mcp.api.tiger_client.oca_order") as mock_oca,
+            patch("tiger_mcp.api.tiger_client.order_leg") as mock_leg,
+        ):
+            mock_leg.side_effect = lambda *a, **kw: MagicMock()
+            mock_oca.return_value = MagicMock()
+
+            tiger_client._build_oca_order(
+                symbol="AAPL",
+                quantity=100,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            mock_oca.assert_called_once()
+            call_kwargs = mock_oca.call_args.kwargs
+            assert call_kwargs["action"] == "SELL"
+            assert call_kwargs["quantity"] == 100
+
+    async def test_build_bracket_order_calls_limit_order_with_legs(
+        self,
+        tiger_client: Any,
+    ) -> None:
+        """_build_bracket_order should call limit_order_with_legs."""
+        with (
+            patch(
+                "tiger_mcp.api.tiger_client.limit_order_with_legs",
+            ) as mock_bracket,
+            patch("tiger_mcp.api.tiger_client.order_leg") as mock_leg,
+        ):
+            mock_leg.side_effect = lambda *a, **kw: MagicMock()
+            mock_bracket.return_value = MagicMock()
+
+            tiger_client._build_bracket_order(
+                symbol="AAPL",
+                quantity=100,
+                entry_limit_price=150.0,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            mock_bracket.assert_called_once()
+            call_kwargs = mock_bracket.call_args.kwargs
+            assert call_kwargs["action"] == "BUY"
+            assert call_kwargs["quantity"] == 100
+            assert call_kwargs["limit_price"] == 150.0
+
+    async def test_place_oca_order_returns_order_and_sub_ids(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """place_oca_order should return dict with order_id and sub_ids."""
+        with (
+            patch("tiger_mcp.api.tiger_client.oca_order") as mock_oca,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_order = MagicMock()
+            mock_order.id = 12345
+            leg1 = MagicMock()
+            leg1.id = 12346
+            leg2 = MagicMock()
+            leg2.id = 12347
+            mock_order.order_legs = [leg1, leg2]
+            mock_oca.return_value = mock_order
+
+            result = await tiger_client.place_oca_order(
+                symbol="AAPL",
+                quantity=100,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            assert result["order_id"] == "12345"
+            assert result["sub_ids"] == ["12346", "12347"]
+            assert result["action"] == "SELL"
+
+    async def test_place_bracket_order_returns_order_and_sub_ids(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """place_bracket_order should return dict with order_id and sub_ids."""
+        with (
+            patch(
+                "tiger_mcp.api.tiger_client.limit_order_with_legs",
+            ) as mock_bracket,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_order = MagicMock()
+            mock_order.id = 22345
+            leg1 = MagicMock()
+            leg1.id = 22346
+            leg2 = MagicMock()
+            leg2.id = 22347
+            mock_order.order_legs = [leg1, leg2]
+            mock_bracket.return_value = mock_order
+
+            result = await tiger_client.place_bracket_order(
+                symbol="AAPL",
+                quantity=100,
+                entry_limit_price=150.0,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            assert result["order_id"] == "22345"
+            assert result["sub_ids"] == ["22346", "22347"]
+            assert result["action"] == "BUY"
+
+    async def test_preview_oca_order_calls_preview(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """preview_oca_order should call preview_order."""
+        with (
+            patch("tiger_mcp.api.tiger_client.oca_order") as mock_oca,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_oca.return_value = MagicMock()
+            mock_trade_client.preview_order.return_value = MagicMock()
+
+            result = await tiger_client.preview_oca_order(
+                symbol="AAPL",
+                quantity=100,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            mock_trade_client.preview_order.assert_called_once()
+            assert isinstance(result, dict)
+
+    async def test_preview_bracket_order_calls_preview(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """preview_bracket_order should call preview_order."""
+        with (
+            patch(
+                "tiger_mcp.api.tiger_client.limit_order_with_legs",
+            ) as mock_bracket,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_bracket.return_value = MagicMock()
+            mock_trade_client.preview_order.return_value = MagicMock()
+
+            result = await tiger_client.preview_bracket_order(
+                symbol="AAPL",
+                quantity=100,
+                entry_limit_price=150.0,
+                tp_limit_price=160.0,
+                sl_stop_price=140.0,
+                sl_limit_price=138.0,
+            )
+
+            mock_trade_client.preview_order.assert_called_once()
+            assert isinstance(result, dict)
+
+    async def test_place_oca_order_error_wraps_exception(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """SDK exception from place_oca_order should become RuntimeError."""
+        with (
+            patch("tiger_mcp.api.tiger_client.oca_order") as mock_oca,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_oca.return_value = MagicMock()
+            mock_trade_client.place_order.side_effect = Exception("OCA failed")
+
+            with pytest.raises(RuntimeError, match="place_oca_order.*OCA failed"):
+                await tiger_client.place_oca_order(
+                    symbol="AAPL",
+                    quantity=100,
+                    tp_limit_price=160.0,
+                    sl_stop_price=140.0,
+                    sl_limit_price=138.0,
+                )
+
+    async def test_place_bracket_order_error_wraps_exception(
+        self,
+        tiger_client: Any,
+        mock_trade_client: MagicMock,
+    ) -> None:
+        """SDK exception from place_bracket_order should become RuntimeError."""
+        with (
+            patch(
+                "tiger_mcp.api.tiger_client.limit_order_with_legs",
+            ) as mock_bracket,
+            patch("tiger_mcp.api.tiger_client.order_leg"),
+        ):
+            mock_bracket.return_value = MagicMock()
+            mock_trade_client.place_order.side_effect = Exception("Bracket failed")
+
+            with pytest.raises(
+                RuntimeError, match="place_bracket_order.*Bracket failed"
+            ):
+                await tiger_client.place_bracket_order(
+                    symbol="AAPL",
+                    quantity=100,
+                    entry_limit_price=150.0,
+                    tp_limit_price=160.0,
+                    sl_stop_price=140.0,
+                    sl_limit_price=138.0,
+                )

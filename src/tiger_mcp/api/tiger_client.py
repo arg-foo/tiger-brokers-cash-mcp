@@ -17,6 +17,9 @@ from tigeropen.common.consts import BarPeriod, OrderStatus
 from tigeropen.common.util.contract_utils import stock_contract
 from tigeropen.common.util.order_utils import (
     limit_order,
+    limit_order_with_legs,
+    oca_order,
+    order_leg,
     stop_limit_order,
 )
 from tigeropen.quote.quote_client import QuoteClient
@@ -481,6 +484,190 @@ class TigerClient:
             return self._order_to_dict(order)
         except Exception as exc:
             msg = f"get_order_detail failed: {exc}"
+            raise RuntimeError(msg) from exc
+
+    # ------------------------------------------------------------------
+    # OCA & Bracket order methods
+    # ------------------------------------------------------------------
+
+    def _build_oca_order(
+        self,
+        symbol: str,
+        quantity: int,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> Any:
+        """Build an OCA SELL order with take-profit and stop-loss legs."""
+        contract = stock_contract(symbol=symbol, currency="USD")
+        legs = [
+            order_leg("LMT", tp_limit_price),
+            order_leg("STP_LMT", sl_stop_price, sl_limit_price),
+        ]
+        order = oca_order(
+            account=self._account,
+            contract=contract,
+            action="SELL",
+            quantity=quantity,
+            order_legs=legs,
+            time_in_force=_TIME_IN_FORCE,
+        )
+        order.outside_rth = False
+        return order
+
+    async def preview_oca_order(
+        self,
+        symbol: str,
+        quantity: int,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> dict[str, Any]:
+        """Preview an OCA SELL order without placing it."""
+        try:
+            order = self._build_oca_order(
+                symbol,
+                quantity,
+                tp_limit_price,
+                sl_stop_price,
+                sl_limit_price,
+            )
+            preview = await self._run_sync(
+                self._trade_client.preview_order,
+                order,
+            )
+            if hasattr(preview, "__dict__"):
+                return vars(preview)
+            return {"preview": preview}
+        except Exception as exc:
+            msg = f"preview_oca_order failed: {exc}"
+            raise RuntimeError(msg) from exc
+
+    async def place_oca_order(
+        self,
+        symbol: str,
+        quantity: int,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> dict[str, Any]:
+        """Place an OCA SELL order and return order/sub IDs."""
+        try:
+            order = self._build_oca_order(
+                symbol,
+                quantity,
+                tp_limit_price,
+                sl_stop_price,
+                sl_limit_price,
+            )
+            await self._run_sync(self._trade_client.place_order, order)
+            sub_ids = [
+                str(leg.id)
+                for leg in getattr(order, "order_legs", [])
+                if hasattr(leg, "id")
+            ]
+            return {
+                "order_id": str(order.id),
+                "sub_ids": sub_ids,
+                "symbol": symbol,
+                "action": "SELL",
+                "quantity": quantity,
+            }
+        except Exception as exc:
+            msg = f"place_oca_order failed: {exc}"
+            raise RuntimeError(msg) from exc
+
+    def _build_bracket_order(
+        self,
+        symbol: str,
+        quantity: int,
+        entry_limit_price: float,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> Any:
+        """Build a bracket BUY order with entry, take-profit and stop-loss."""
+        contract = stock_contract(symbol=symbol, currency="USD")
+        legs = [
+            order_leg("PROFIT", tp_limit_price),
+            order_leg("LOSS", sl_stop_price, sl_limit_price),
+        ]
+        order = limit_order_with_legs(
+            account=self._account,
+            contract=contract,
+            action="BUY",
+            quantity=quantity,
+            limit_price=entry_limit_price,
+            order_legs=legs,
+            time_in_force=_TIME_IN_FORCE,
+        )
+        order.outside_rth = False
+        return order
+
+    async def preview_bracket_order(
+        self,
+        symbol: str,
+        quantity: int,
+        entry_limit_price: float,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> dict[str, Any]:
+        """Preview a bracket BUY order without placing it."""
+        try:
+            order = self._build_bracket_order(
+                symbol,
+                quantity,
+                entry_limit_price,
+                tp_limit_price,
+                sl_stop_price,
+                sl_limit_price,
+            )
+            preview = await self._run_sync(
+                self._trade_client.preview_order,
+                order,
+            )
+            if hasattr(preview, "__dict__"):
+                return vars(preview)
+            return {"preview": preview}
+        except Exception as exc:
+            msg = f"preview_bracket_order failed: {exc}"
+            raise RuntimeError(msg) from exc
+
+    async def place_bracket_order(
+        self,
+        symbol: str,
+        quantity: int,
+        entry_limit_price: float,
+        tp_limit_price: float,
+        sl_stop_price: float,
+        sl_limit_price: float,
+    ) -> dict[str, Any]:
+        """Place a bracket BUY order and return order/sub IDs."""
+        try:
+            order = self._build_bracket_order(
+                symbol,
+                quantity,
+                entry_limit_price,
+                tp_limit_price,
+                sl_stop_price,
+                sl_limit_price,
+            )
+            await self._run_sync(self._trade_client.place_order, order)
+            sub_ids = [
+                str(leg.id)
+                for leg in getattr(order, "order_legs", [])
+                if hasattr(leg, "id")
+            ]
+            return {
+                "order_id": str(order.id),
+                "sub_ids": sub_ids,
+                "symbol": symbol,
+                "action": "BUY",
+                "quantity": quantity,
+            }
+        except Exception as exc:
+            msg = f"place_bracket_order failed: {exc}"
             raise RuntimeError(msg) from exc
 
     # ------------------------------------------------------------------
