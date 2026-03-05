@@ -1,6 +1,11 @@
-<tiger-brokers-api-doc-url>
-  https://docs-en.itigerup.com/docs/intro
-</tiger-brokers-api-doc-url>
+<tiger-brokers-api-doc>
+  <url>
+    https://docs-en.itigerup.com/docs/intro
+  </url>
+  <always>
+    ground your claims with link to the documentation.
+  </always>
+</tiger-brokers-api-doc>
 
 
 <always>
