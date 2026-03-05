@@ -9,8 +9,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from tiger_mcp.api.tiger_client import TigerClient
     from tiger_mcp.config import Settings
     from tiger_mcp.safety.checks import SafetyResult
+
+
+async def fetch_safety_data(
+    client: TigerClient,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Fetch account and position data from TigerClient.
+
+    Returns
+    -------
+    tuple
+        ``(account_data, positions_data)``
+    """
+    assets = await client.get_assets()
+    positions = await client.get_positions()
+    return assets, positions
 
 
 def format_safety_result(result: SafetyResult) -> str:

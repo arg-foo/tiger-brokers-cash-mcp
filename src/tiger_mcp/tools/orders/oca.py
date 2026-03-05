@@ -30,7 +30,11 @@ from tiger_mcp.safety.checks import (
 )
 from tiger_mcp.safety.state import DailyState
 from tiger_mcp.server import mcp
-from tiger_mcp.tools.orders._helpers import format_safety_result, get_effective_config
+from tiger_mcp.tools.orders._helpers import (
+    fetch_safety_data,
+    format_safety_result,
+    get_effective_config,
+)
 
 if TYPE_CHECKING:
     from tiger_mcp.api.tiger_client import TigerClient
@@ -186,21 +190,6 @@ def _validate_bracket_params(
 # ---------------------------------------------------------------------------
 
 
-async def _fetch_safety_data(
-    client: TigerClient,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Fetch account and position data from TigerClient.
-
-    Returns
-    -------
-    tuple
-        ``(account_data, positions_data)``
-    """
-    assets = await client.get_assets()
-    positions = await client.get_positions()
-    return assets, positions
-
-
 def _check_position(
     positions: list[dict[str, Any]],
     symbol: str,
@@ -229,8 +218,7 @@ def _check_position(
     return None
 
 
-async def _build_and_run_safety(
-    client: TigerClient,
+def _build_and_run_safety(
     state: DailyState,
     assets: dict[str, Any],
     positions: list[dict[str, Any]],
@@ -329,7 +317,7 @@ async def preview_oca_order(
 
     # 2. Fetch data and check position
     try:
-        assets, positions = await _fetch_safety_data(_client)
+        assets, positions = await fetch_safety_data(_client)
     except Exception as exc:
         return f"Error fetching market data: {exc}"
 
@@ -339,16 +327,15 @@ async def preview_oca_order(
 
     # 3. Run safety checks
     try:
-        safety_result = await _build_and_run_safety(
-            _client,
+        safety_result = _build_and_run_safety(
             _state,
             assets,
             positions,
             symbol,
             "SELL",
             quantity,
-            "LMT",
-            sl_limit_price,
+            "OCA",
+            tp_limit_price,
         )
     except Exception as exc:
         return f"Error running safety checks: {exc}"
@@ -454,7 +441,7 @@ async def place_oca_order(
 
     # 2. Fetch data and check position
     try:
-        assets, positions = await _fetch_safety_data(_client)
+        assets, positions = await fetch_safety_data(_client)
     except Exception as exc:
         return f"Error fetching market data: {exc}"
 
@@ -464,16 +451,15 @@ async def place_oca_order(
 
     # 3. Run safety checks
     try:
-        safety_result = await _build_and_run_safety(
-            _client,
+        safety_result = _build_and_run_safety(
             _state,
             assets,
             positions,
             symbol,
             "SELL",
             quantity,
-            "LMT",
-            sl_limit_price,
+            "OCA",
+            tp_limit_price,
         )
     except Exception as exc:
         return f"Error running safety checks: {exc}"
@@ -590,20 +576,19 @@ async def preview_bracket_order(
 
     # 2. Fetch data and run safety checks
     try:
-        assets, positions = await _fetch_safety_data(_client)
+        assets, positions = await fetch_safety_data(_client)
     except Exception as exc:
         return f"Error fetching market data: {exc}"
 
     try:
-        safety_result = await _build_and_run_safety(
-            _client,
+        safety_result = _build_and_run_safety(
             _state,
             assets,
             positions,
             symbol,
             "BUY",
             quantity,
-            "LMT",
+            "BRACKET",
             entry_limit_price,
         )
     except Exception as exc:
@@ -716,20 +701,19 @@ async def place_bracket_order(
 
     # 2. Fetch data and run safety checks
     try:
-        assets, positions = await _fetch_safety_data(_client)
+        assets, positions = await fetch_safety_data(_client)
     except Exception as exc:
         return f"Error fetching market data: {exc}"
 
     try:
-        safety_result = await _build_and_run_safety(
-            _client,
+        safety_result = _build_and_run_safety(
             _state,
             assets,
             positions,
             symbol,
             "BUY",
             quantity,
-            "LMT",
+            "BRACKET",
             entry_limit_price,
         )
     except Exception as exc:

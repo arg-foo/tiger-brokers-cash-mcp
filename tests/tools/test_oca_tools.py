@@ -412,6 +412,54 @@ class TestPreviewOcaOrder:
         mock_client.preview_oca_order.assert_not_awaited()
 
     @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_oca_order_type(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use 'OCA' order_type, not 'LMT'."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.preview_oca_order(
+            symbol="AAPL",
+            quantity=100,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.order_type == "OCA"
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_tp_limit_price(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use tp_limit_price for conservative estimation."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.preview_oca_order(
+            symbol="AAPL",
+            quantity=100,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.limit_price == 160.0
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
     async def test_api_error_returns_error_message(
         self,
         mock_safety: MagicMock,
@@ -604,6 +652,54 @@ class TestPlaceOcaOrder:
         assert "error" in result.lower() or "Error" in result
 
     @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_oca_order_type(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use 'OCA' order_type for fingerprint consistency."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.place_oca_order(
+            symbol="AAPL",
+            quantity=100,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.order_type == "OCA"
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_tp_limit_price(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use tp_limit_price for conservative estimation."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.place_oca_order(
+            symbol="AAPL",
+            quantity=100,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.limit_price == 160.0
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
     async def test_fingerprint_recorded_on_success(
         self,
         mock_safety: MagicMock,
@@ -656,6 +752,31 @@ class TestPreviewBracketOrder:
         assert isinstance(result, str)
         assert "AAPL" in result
         mock_client.preview_bracket_order.assert_awaited_once()
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_bracket_order_type(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use 'BRACKET' order_type, not 'LMT'."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.preview_bracket_order(
+            symbol="AAPL",
+            quantity=100,
+            entry_limit_price=150.0,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.order_type == "BRACKET"
 
     async def test_invalid_params_returns_error(
         self,
@@ -726,6 +847,31 @@ class TestPlaceBracketOrder:
 
         assert "22345" in result
         mock_client.place_bracket_order.assert_awaited_once()
+
+    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
+    async def test_safety_check_uses_bracket_order_type(
+        self,
+        mock_safety: MagicMock,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Safety check should use 'BRACKET' order_type for fingerprint consistency."""
+        mock_safety.return_value = _safety_passed()
+
+        await oca_mod.place_bracket_order(
+            symbol="AAPL",
+            quantity=100,
+            entry_limit_price=150.0,
+            tp_limit_price=160.0,
+            sl_stop_price=140.0,
+            sl_limit_price=138.0,
+        )
+
+        mock_safety.assert_called_once()
+        order_params = mock_safety.call_args.kwargs.get(
+            "order",
+            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
+        )
+        assert order_params.order_type == "BRACKET"
 
     async def test_invalid_params_returns_error(
         self,
@@ -867,6 +1013,16 @@ class TestPlaceBracketOrder:
 # ---------------------------------------------------------------------------
 # Module-level client/state access pattern
 # ---------------------------------------------------------------------------
+
+
+class TestBuildAndRunSafety:
+    """Tests for _build_and_run_safety helper."""
+
+    def test_build_and_run_safety_is_not_async(self) -> None:
+        """_build_and_run_safety should be a regular (sync) function."""
+        import inspect
+
+        assert not inspect.iscoroutinefunction(oca_mod._build_and_run_safety)
 
 
 class TestClientAccessPattern:

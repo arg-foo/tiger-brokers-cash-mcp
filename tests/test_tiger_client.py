@@ -237,6 +237,10 @@ class TestAsyncWrapping:
             "get_open_orders",
             "get_order_detail",
             "get_bars",
+            "preview_oca_order",
+            "place_oca_order",
+            "preview_bracket_order",
+            "place_bracket_order",
         ]
         for method_name in public_methods:
             method = getattr(tiger_client, method_name)
