@@ -29,7 +29,6 @@ services:
       - TIGER_STATE_DIR=/data/state
       - MCP_TRANSPORT=streamable-http
       - REDIS_URL=redis://redis:6379/0
-      - TIGER_EVENTS_ENABLED=true
 
 volumes:
   tiger-state:
