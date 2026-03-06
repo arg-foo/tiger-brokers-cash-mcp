@@ -502,7 +502,7 @@ class TigerClient:
         contract = stock_contract(symbol=symbol, currency="USD")
         legs = [
             order_leg("LMT", tp_limit_price),
-            order_leg("STP_LMT", sl_stop_price, sl_limit_price),
+            order_leg("STP_LMT", sl_stop_price, limit_price=sl_limit_price),
         ]
         order = oca_order(
             account=self._account,
@@ -590,7 +590,7 @@ class TigerClient:
         contract = stock_contract(symbol=symbol, currency="USD")
         legs = [
             order_leg("PROFIT", tp_limit_price),
-            order_leg("LOSS", sl_stop_price, sl_limit_price),
+            order_leg("LOSS", sl_stop_price, limit_price=sl_limit_price),
         ]
         order = limit_order_with_legs(
             account=self._account,
