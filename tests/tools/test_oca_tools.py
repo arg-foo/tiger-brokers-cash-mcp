@@ -31,15 +31,6 @@ def mock_client() -> AsyncMock:
     client.get_positions.return_value = [
         {"symbol": "AAPL", "quantity": 100},
     ]
-    # Default preview
-    client.preview_oca_order.return_value = {
-        "estimated_cost": 0.0,
-        "commission": 1.99,
-    }
-    client.preview_bracket_order.return_value = {
-        "estimated_cost": 15_000.0,
-        "commission": 1.99,
-    }
     # Default place order
     client.place_oca_order.return_value = {
         "order_id": "12345",
@@ -345,162 +336,6 @@ class TestValidateBracketParams:
 
 
 # ---------------------------------------------------------------------------
-# preview_oca_order
-# ---------------------------------------------------------------------------
-
-
-class TestPreviewOcaOrder:
-    """Tests for the preview_oca_order MCP tool."""
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_valid_preview_with_position(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview with valid params and existing position returns output."""
-        mock_safety.return_value = _safety_passed()
-
-        result = await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert isinstance(result, str)
-        assert "AAPL" in result
-        mock_client.preview_oca_order.assert_awaited_once()
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_preview_with_safety_errors_still_returns_preview(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview should show safety errors but still return preview data."""
-        mock_safety.return_value = _safety_failed(
-            errors=["Some safety error"],
-        )
-
-        result = await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "Some safety error" in result
-        mock_client.preview_oca_order.assert_awaited_once()
-
-    async def test_invalid_params_returns_error_without_api_call(
-        self,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview with invalid params returns error without calling API."""
-        result = await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=0,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "error" in result.lower() or "Error" in result
-        mock_client.preview_oca_order.assert_not_awaited()
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_safety_check_uses_oca_order_type(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Safety check should use 'OCA' order_type, not 'LMT'."""
-        mock_safety.return_value = _safety_passed()
-
-        await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        mock_safety.assert_called_once()
-        order_params = mock_safety.call_args.kwargs.get(
-            "order",
-            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
-        )
-        assert order_params.order_type == "OCA"
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_safety_check_uses_tp_limit_price(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Safety check should use tp_limit_price for conservative estimation."""
-        mock_safety.return_value = _safety_passed()
-
-        await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        mock_safety.assert_called_once()
-        order_params = mock_safety.call_args.kwargs.get(
-            "order",
-            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
-        )
-        assert order_params.limit_price == 160.0
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_api_error_returns_error_message(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview should return error message if TigerClient raises."""
-        mock_safety.return_value = _safety_passed()
-        mock_client.preview_oca_order.side_effect = RuntimeError("API failed")
-
-        result = await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "error" in result.lower() or "Error" in result
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_no_position_for_symbol_returns_error(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview should return error when no position exists for symbol."""
-        mock_client.get_positions.return_value = []
-
-        result = await oca_mod.preview_oca_order(
-            symbol="AAPL",
-            quantity=100,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "position" in result.lower()
-        mock_client.preview_oca_order.assert_not_awaited()
-
-
-# ---------------------------------------------------------------------------
 # place_oca_order
 # ---------------------------------------------------------------------------
 
@@ -721,102 +556,6 @@ class TestPlaceOcaOrder:
         fingerprint_arg = mock_state.record_order.call_args[0][0]
         assert isinstance(fingerprint_arg, str)
         assert len(fingerprint_arg) > 0
-
-
-# ---------------------------------------------------------------------------
-# preview_bracket_order
-# ---------------------------------------------------------------------------
-
-
-class TestPreviewBracketOrder:
-    """Tests for the preview_bracket_order MCP tool."""
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_valid_preview_returns_formatted_output(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview with valid params returns formatted output."""
-        mock_safety.return_value = _safety_passed()
-
-        result = await oca_mod.preview_bracket_order(
-            symbol="AAPL",
-            quantity=100,
-            entry_limit_price=150.0,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert isinstance(result, str)
-        assert "AAPL" in result
-        mock_client.preview_bracket_order.assert_awaited_once()
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_safety_check_uses_bracket_order_type(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Safety check should use 'BRACKET' order_type, not 'LMT'."""
-        mock_safety.return_value = _safety_passed()
-
-        await oca_mod.preview_bracket_order(
-            symbol="AAPL",
-            quantity=100,
-            entry_limit_price=150.0,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        mock_safety.assert_called_once()
-        order_params = mock_safety.call_args.kwargs.get(
-            "order",
-            mock_safety.call_args[0][0] if mock_safety.call_args[0] else None,
-        )
-        assert order_params.order_type == "BRACKET"
-
-    async def test_invalid_params_returns_error(
-        self,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview bracket with invalid params returns error."""
-        result = await oca_mod.preview_bracket_order(
-            symbol="AAPL",
-            quantity=0,
-            entry_limit_price=150.0,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "error" in result.lower() or "Error" in result
-        mock_client.preview_bracket_order.assert_not_awaited()
-
-    @patch("tiger_mcp.tools.orders.oca.run_safety_checks")
-    async def test_api_error_returns_error_message(
-        self,
-        mock_safety: MagicMock,
-        mock_client: AsyncMock,
-    ) -> None:
-        """Preview should return error message if TigerClient raises."""
-        mock_safety.return_value = _safety_passed()
-        mock_client.preview_bracket_order.side_effect = RuntimeError(
-            "API failed",
-        )
-
-        result = await oca_mod.preview_bracket_order(
-            symbol="AAPL",
-            quantity=100,
-            entry_limit_price=150.0,
-            tp_limit_price=160.0,
-            sl_stop_price=140.0,
-            sl_limit_price=138.0,
-        )
-
-        assert "error" in result.lower() or "Error" in result
 
 
 # ---------------------------------------------------------------------------
@@ -1048,20 +787,10 @@ class TestClientAccessPattern:
 class TestMcpToolRegistration:
     """Verify the tools are registered with @mcp.tool() decorator."""
 
-    def test_preview_oca_order_is_async(self) -> None:
-        import inspect
-
-        assert inspect.iscoroutinefunction(oca_mod.preview_oca_order)
-
     def test_place_oca_order_is_async(self) -> None:
         import inspect
 
         assert inspect.iscoroutinefunction(oca_mod.place_oca_order)
-
-    def test_preview_bracket_order_is_async(self) -> None:
-        import inspect
-
-        assert inspect.iscoroutinefunction(oca_mod.preview_bracket_order)
 
     def test_place_bracket_order_is_async(self) -> None:
         import inspect

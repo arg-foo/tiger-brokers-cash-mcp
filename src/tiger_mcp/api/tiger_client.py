@@ -515,34 +515,6 @@ class TigerClient:
         order.outside_rth = False
         return order
 
-    async def preview_oca_order(
-        self,
-        symbol: str,
-        quantity: int,
-        tp_limit_price: float,
-        sl_stop_price: float,
-        sl_limit_price: float,
-    ) -> dict[str, Any]:
-        """Preview an OCA SELL order without placing it."""
-        try:
-            order = self._build_oca_order(
-                symbol,
-                quantity,
-                tp_limit_price,
-                sl_stop_price,
-                sl_limit_price,
-            )
-            preview = await self._run_sync(
-                self._trade_client.preview_order,
-                order,
-            )
-            if hasattr(preview, "__dict__"):
-                return vars(preview)
-            return {"preview": preview}
-        except Exception as exc:
-            msg = f"preview_oca_order failed: {exc}"
-            raise RuntimeError(msg) from exc
-
     async def place_oca_order(
         self,
         symbol: str,
@@ -603,36 +575,6 @@ class TigerClient:
         order.time_in_force = _TIME_IN_FORCE
         order.outside_rth = False
         return order
-
-    async def preview_bracket_order(
-        self,
-        symbol: str,
-        quantity: int,
-        entry_limit_price: float,
-        tp_limit_price: float,
-        sl_stop_price: float,
-        sl_limit_price: float,
-    ) -> dict[str, Any]:
-        """Preview a bracket BUY order without placing it."""
-        try:
-            order = self._build_bracket_order(
-                symbol,
-                quantity,
-                entry_limit_price,
-                tp_limit_price,
-                sl_stop_price,
-                sl_limit_price,
-            )
-            preview = await self._run_sync(
-                self._trade_client.preview_order,
-                order,
-            )
-            if hasattr(preview, "__dict__"):
-                return vars(preview)
-            return {"preview": preview}
-        except Exception as exc:
-            msg = f"preview_bracket_order failed: {exc}"
-            raise RuntimeError(msg) from exc
 
     async def place_bracket_order(
         self,

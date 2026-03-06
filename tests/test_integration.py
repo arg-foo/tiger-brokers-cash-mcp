@@ -30,13 +30,13 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    """Verify all 16 tools are registered with the MCP server instance."""
+    """Verify all 14 tools are registered with the MCP server instance."""
 
-    def test_all_16_tools_registered(self) -> None:
-        """Importing the server module should result in 16 registered tools."""
+    def test_all_14_tools_registered(self) -> None:
+        """Importing the server module should result in 14 registered tools."""
         tool_names = _get_registered_tool_names()
-        assert len(tool_names) == 16, (
-            f"Expected 16 tools to be registered, got {len(tool_names)}. "
+        assert len(tool_names) == 14, (
+            f"Expected 14 tools to be registered, got {len(tool_names)}. "
             f"Tool names: {sorted(tool_names)}"
         )
 
@@ -98,12 +98,10 @@ class TestToolRegistration:
         )
 
     def test_oca_bracket_tools_registered(self) -> None:
-        """The four OCA/bracket tools must be registered."""
+        """The two OCA/bracket tools must be registered."""
         tool_names = _get_registered_tool_names()
         expected = {
-            "preview_oca_order",
             "place_oca_order",
-            "preview_bracket_order",
             "place_bracket_order",
         }
         assert expected.issubset(tool_names), (
