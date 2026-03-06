@@ -237,9 +237,7 @@ class TestAsyncWrapping:
             "get_open_orders",
             "get_order_detail",
             "get_bars",
-            "preview_oca_order",
             "place_oca_order",
-            "preview_bracket_order",
             "place_bracket_order",
         ]
         for method_name in public_methods:
@@ -997,57 +995,6 @@ class TestOcaBracketOrders:
             assert result["order_id"] == "22345"
             assert result["sub_ids"] == ["22346", "22347"]
             assert result["action"] == "BUY"
-
-    async def test_preview_oca_order_calls_preview(
-        self,
-        tiger_client: Any,
-        mock_trade_client: MagicMock,
-    ) -> None:
-        """preview_oca_order should call preview_order."""
-        with (
-            patch("tiger_mcp.api.tiger_client.oca_order") as mock_oca,
-            patch("tiger_mcp.api.tiger_client.order_leg"),
-        ):
-            mock_oca.return_value = MagicMock()
-            mock_trade_client.preview_order.return_value = MagicMock()
-
-            result = await tiger_client.preview_oca_order(
-                symbol="AAPL",
-                quantity=100,
-                tp_limit_price=160.0,
-                sl_stop_price=140.0,
-                sl_limit_price=138.0,
-            )
-
-            mock_trade_client.preview_order.assert_called_once()
-            assert isinstance(result, dict)
-
-    async def test_preview_bracket_order_calls_preview(
-        self,
-        tiger_client: Any,
-        mock_trade_client: MagicMock,
-    ) -> None:
-        """preview_bracket_order should call preview_order."""
-        with (
-            patch(
-                "tiger_mcp.api.tiger_client.limit_order_with_legs",
-            ) as mock_bracket,
-            patch("tiger_mcp.api.tiger_client.order_leg"),
-        ):
-            mock_bracket.return_value = MagicMock()
-            mock_trade_client.preview_order.return_value = MagicMock()
-
-            result = await tiger_client.preview_bracket_order(
-                symbol="AAPL",
-                quantity=100,
-                entry_limit_price=150.0,
-                tp_limit_price=160.0,
-                sl_stop_price=140.0,
-                sl_limit_price=138.0,
-            )
-
-            mock_trade_client.preview_order.assert_called_once()
-            assert isinstance(result, dict)
 
     async def test_place_oca_order_error_wraps_exception(
         self,
